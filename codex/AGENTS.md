@@ -9,9 +9,9 @@ Code not written is the best code. Reuse before you write.
 
 Use the `workflow` skill for any change that needs a plan. Phases:
 
-1. Design: scan, subtract, slice, diagram, prove on paper. Present. Wait for approval.
+1. Design: scan, subtract, slice, diagram, prove on paper. Write the JSON plan. Spike risky assumptions in the sandbox. Present. Wait for approval.
 2. Implement: one scenario at a time. Test fails first, then passes.
-3. Review and test: run the completion gate.
+3. Review and test: run the verify scripts and the completion gate.
 4. Close: present the result. Update the project wiki.
 
 ## Memory
@@ -26,6 +26,7 @@ Before you claim success:
 
 - Build every affected target.
 - Run affected tests and the repository CI-equivalent checks.
+- Run `verify_plan.py` on the plan. An open `fail` finding blocks the gate.
 - Check for merge conflicts with `git merge-tree --write-tree HEAD origin/main`.
 - Report each gate as passed, failed, or not run. Never report an unrun gate as passed.
 - Name the degree: prototype, working, robust, or production.

@@ -16,6 +16,7 @@ English · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
 
 - **Rules and skills**: a design, implement, review, and close workflow, with two human approval gates, BDD scenarios, and a Graphviz diagram.
 - **Hooks**: a guard that denies destructive shell commands, also in bypass mode, and a check for Simplified Technical English (STE).
+- **Checks**: scripts that test the JSON plan and the changed Python and JS code against it. A reusable sandbox tests risky assumptions before you write code.
 
 You see the rules and your project wiki index at the start of each session. Then the agent asks you questions before it writes code.
 
@@ -27,7 +28,7 @@ Guiding question: *what is the minimal amount of code and impact that leads to t
 
 - Python 3.9 or later, on `PATH` as `python3` or `python`.
 - Graphviz (`dot`), for design diagrams.
-- Node 22.13 or later, only for the optional `agent-memory` plugin.
+- Node 22.13 or later, for the JS checks, the spike sandbox, and the optional `agent-memory` plugin.
 - Claude Code, or the Codex app or CLI.
 
 ## Install (๑•̀ㅂ•́)و✧
@@ -59,6 +60,14 @@ After a restart, the session context shows a memory index. The store is `~/.agen
 ### 4. Install for Codex
 
 Codex needs files copied and a hook added to `~/.codex/config.toml`. Follow [INSTALL.md](INSTALL.md). An agent can run it step by step.
+
+### 5. Set up the spike sandbox (optional, once)
+
+```bash
+python tools/sandbox.py <empty-dir>
+```
+
+The command needs network access. It prints `sandbox ready: <empty-dir>`. Each task then uses a `spike/<task>` branch there.
 
 ## Skills and hooks
 

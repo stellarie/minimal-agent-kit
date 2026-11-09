@@ -16,6 +16,7 @@
 
 - **规则与技能**：设计、实现、审查、收尾的工作流，含两道人工批准关卡、BDD 场景和 Graphviz 图。
 - **钩子**：一个拒绝破坏性 shell 命令的 guard（在绕过模式下也有效），以及简化技术英语（STE）检查。
+- **检查**：用脚本对照 JSON 计划检查计划本身和改动的 Python、JS 代码。一个可复用的沙箱在写代码前测试有风险的假设。
 
 每个会话开始时，你会看到规则和项目 wiki 索引。之后代理会先向你提问，再写代码。
 
@@ -27,7 +28,7 @@
 
 - Python 3.9 或更高版本，在 `PATH` 中名为 `python3` 或 `python`。
 - Graphviz（`dot`），用于设计图。
-- Node 22.13 或更高版本，仅可选的 `agent-memory` 插件需要。
+- Node 22.13 或更高版本，用于 JS 检查、spike 沙箱和可选的 `agent-memory` 插件。
 - Claude Code，或 Codex 应用或 CLI。
 
 ## 安装 (๑•̀ㅂ•́)و✧
@@ -59,6 +60,14 @@ claude plugin install agent-memory@minimal-agent-kit
 ### 4. 为 Codex 安装
 
 Codex 需要复制文件，并在 `~/.codex/config.toml` 中添加钩子。请按照 [INSTALL.md](INSTALL.md) 操作。代理可以逐步执行它。
+
+### 5. 设置 spike 沙箱（可选，一次）
+
+```bash
+python tools/sandbox.py <empty-dir>
+```
+
+该命令需要网络访问。它输出 `sandbox ready: <empty-dir>`。之后每个任务在其中使用 `spike/<task>` 分支。
 
 ## 技能与钩子
 
