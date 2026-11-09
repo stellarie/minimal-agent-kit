@@ -21,8 +21,9 @@ EFFECTS = re.compile(
     r"^(open|print|input|exec|eval|fetch|require)$"
     r"|^(os|shutil|subprocess|requests|httpx|urllib|socket|random|logging|pickle|sqlite3|fs|http|https"
     r"|child_process|axios|localStorage|sessionStorage|console)\."
-    r"|^(os\.environ|os\.getenv|process\.env|process\.exit|time\.time|time\.sleep|Math\.random|Date\.now|json\.dump)"
-    r"|\.(write|write_text|write_bytes|writeFile|writeFileSync|appendFile|unlink|unlinkSync|rmdir|mkdir|remove|rm|rmSync|send|query|execute)$"
+    r"|^(os\.environ|os\.getenv|process\.env|process\.exit|time\.time|time\.sleep|Math\.random|Date\.now)"
+    r"|^(json\.dump|pickle\.dump)$"
+    r"|\.(write_text|write_bytes|writeFile|writeFileSync|appendFile|appendFileSync|unlink|unlinkSync|rmdir|mkdir|rmSync)$"
 )
 HUNK = re.compile(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@", re.M)
 
@@ -36,13 +37,13 @@ def git(root, *args):
 
 
 def changed_files(root, base):
-    tracked = git(root, "diff", "--name-only", base).stdout.split()
-    new = git(root, "ls-files", "--others", "--exclude-standard").stdout.split()
-    return sorted(set(tracked) | set(new))
+    tracked = git(root, "diff", "--name-only", "--relative", "-z", base).stdout.split("\0")
+    new = git(root, "ls-files", "--others", "--exclude-standard", "-z").stdout.split("\0")
+    return sorted((set(tracked) | set(new)) - {""})
 
 
 def base_source(root, base, rel):
-    r = git(root, "show", f"{base}:{rel}")
+    r = git(root, "show", f"{base}:./{rel}")
     return r.stdout if r.returncode == 0 else None
 
 
@@ -77,9 +78,13 @@ def allowed(name, entries):
     return any(name == e or name.startswith(e + ".") or name.endswith("." + e) for e in entries)
 
 
-def symbol(item):
-    words = re.findall(r"[A-Za-z_$][\w$]*", item.split("(")[0].split("{")[0])
-    return words[-1] if words else item
+def planned(item, entries):
+    """Route, props, and export items must match an entry exactly. Python items match by symbol name."""
+    if item.split(" ", 1)[0] in ("route", "props", "export"):
+        return item in entries
+    words = re.findall(r"[A-Za-z_$][\w$]*", item.split("(")[0])
+    name = words[-1] if words else item
+    return name in {e.split(".")[-1] for e in entries}
 
 
 def done_lines(plan, rel):
@@ -108,7 +113,7 @@ def check_file(plan, root, base, rel, phase):
     touched = [fn for fn in head["functions"] if lines & set(range(fn["start"], fn["end"] + 1))]
     for fn in touched:
         if fn["passthrough"]:
-            out.append(finding(f"eta:{rel}:{fn['name']}", "eta", "function only passes its parameters to one call", rel, fn["start"]))
+            out.append(finding(f"eta:{rel}:{fn['name']}:{fn['start']}", "eta", "function only passes its parameters to one call", rel, fn["start"]))
     for c in head["calls"]:
         if c["line"] in lines and EFFECTS.search(c["name"]) and not allowed(c["name"], owner.get("calls", [])):
             out.append(finding(f"effect:{rel}:{c['name']}", "pure-slice", f"effect call {c['name']} is not in {owner['id']} calls", rel, c["line"]))
@@ -119,7 +124,7 @@ def check_file(plan, root, base, rel, phase):
             if not any(a <= fn["start"] and fn["end"] <= b for a, b in spans):
                 out.append(finding(f"reduction:{rel}:{fn['name']}", "reduction", "changed function maps to no pseudocode line", rel, fn["start"]))
     for item in sorted(set(head["interface"]) ^ set(old["interface"])):
-        if symbol(item) not in {e.split(".")[-1] for e in owner.get("interface", [])}:
+        if not planned(item, owner.get("interface", [])):
             change = "added or changed" if item in head["interface"] else "removed or changed"
             out.append(finding(f"interface:{rel}:{item}", "interface", f"public interface {change}: {item}", rel))
     return out
@@ -141,7 +146,7 @@ def main(argv):
     parser.add_argument("--phase", type=int, choices=(1, 2, 3), default=2)
     parser.add_argument("files", nargs="*")
     args = parser.parse_args(argv)
-    plan = json.loads(args.plan.read_text(encoding="utf-8"))
+    plan = json.loads(args.plan.read_text(encoding="utf-8-sig"))
     found = run(plan, args.root.resolve(), args.base, args.phase, args.files)
     print(json.dumps(found, indent=1))
     return 1 if any(f["level"] == "fail" for f in found) else 0

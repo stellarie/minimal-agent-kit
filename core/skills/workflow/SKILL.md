@@ -31,6 +31,8 @@ Guiding question for every phase: what is the minimal amount of code and impact 
 - `calculus.md`: nine checks with steps and pass conditions: purity, signatures, one concern, pseudocode reduction, normal form, confluence, eta, termination, laziness.
 - `bdd.md`: scenario format.
 - `$VERIFY/plan.schema.md`: the plan file in JSON, and the finding format.
+- `diagram.md`: diagram style.
+- `blackboard.md`: task file for subagents.
 
 ## Scripts
 
@@ -43,8 +45,6 @@ Guiding question for every phase: what is the minimal amount of code and impact 
 | `check_tools.py --base REV` | The check tools the project has configured. A missing tool is a note, not a fail. |
 
 The spike sandbox comes from `tools/sandbox.py` in the kit checkout. Its `README.md` gives the spike steps.
-- `diagram.md`: diagram style.
-- `blackboard.md`: task file for subagents.
 
 ## Phase status line
 

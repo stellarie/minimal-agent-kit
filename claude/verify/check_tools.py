@@ -23,18 +23,24 @@ TOOLS = [
     ("pyright", "py", ["pyrightconfig.json"], "tool.pyright", ["pyright", "FILES"]),
     ("bandit", "py", [".bandit"], "tool.bandit", ["bandit", "-q", "FILES"]),
     ("vulture", "py", [], "tool.vulture", ["vulture", "FILES"]),
-    ("pip-audit", "py", [], None, ["pip-audit"]),
+    ("pip-audit", "py", [], None, ["pip-audit", "-r", "requirements.txt"]),
     ("diff-cover", "py", [], None, ["diff-cover", "coverage.xml", "--compare-branch", "BASE"]),
-    ("mutmut", "py", [], "tool.mutmut", ["mutmut", "run"]),
+    ("mutmut", "py", [], "tool.mutmut", None),
     ("eslint", "js", ["eslint.config.js", "eslint.config.mjs", "eslint.config.cjs", ".eslintrc", ".eslintrc.js", ".eslintrc.json", ".eslintrc.cjs"], None, ["npx", "--no-install", "eslint", "FILES"]),
     ("typescript", "js", ["tsconfig.json"], None, ["npx", "--no-install", "tsc", "--noEmit"]),
     ("knip", "js", ["knip.json", "knip.jsonc", ".knip.json"], None, ["npx", "--no-install", "knip"]),
     ("c8", "js", [".c8rc", ".c8rc.json"], None, ["npx", "--no-install", "c8", "check-coverage"]),
-    ("@stryker-mutator/core", "js", ["stryker.conf.js", "stryker.conf.mjs", "stryker.config.json", "stryker.conf.json"], None, ["npx", "--no-install", "stryker", "run"]),
+    ("@stryker-mutator/core", "js", ["stryker.conf.js", "stryker.conf.mjs", "stryker.config.json", "stryker.conf.json"], None, ["npx", "--no-install", "stryker", "run", "--mutate", "FILELIST"]),
     ("npm-audit", "js", ["package-lock.json"], None, ["npm", "audit", "--audit-level=high"]),
     ("semgrep", "any", [".semgrep.yml", ".semgrep.yaml", ".semgrep"], None, ["semgrep", "scan", "--error", "--config", "CONFIG", "FILES"]),
 ]
 EXT = {"py": {".py"}, "js": {".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx"}}
+# Files a tool needs before it can run; a missing one gives "not-run".
+NEEDS = {"pip-audit": ["requirements.txt"], "diff-cover": ["coverage.xml"], "c8": ["coverage"]}
+# Tools that check the whole project; run them only when one of these files changed.
+WHEN_CHANGED = {"pip-audit": ["requirements.txt", "pyproject.toml"], "npm-audit": ["package.json", "package-lock.json"]}
+# cmd.exe reads these characters in arguments to a .cmd or .bat file.
+UNSAFE = set('&|<>^%!"')
 
 
 def finding(name, level, detail):
@@ -83,6 +89,8 @@ def command(tool, source, base, changed):
             cmd += files
         elif part == "BASE":
             cmd.append(base)
+        elif part == "FILELIST":
+            cmd.append(",".join(files))
         elif part == "CONFIG":
             cmd.append(source)
         else:
@@ -97,13 +105,26 @@ def run(root, base, changed):
         if source is None:
             out.append(finding(name, "consider", f"not configured: consider {name}"))
             continue
+        if tool[4] is None:
+            out.append(finding(name, "not-run", f"configured in {source}; run it by hand on the changed lines"))
+            continue
+        if name in WHEN_CHANGED and not set(changed) & set(WHEN_CHANGED[name]):
+            out.append(finding(name, "pass", "dependency files did not change"))
+            continue
+        missing = [n for n in NEEDS.get(name, []) if not (root / n).exists()]
+        if missing:
+            out.append(finding(name, "not-run", f"configured in {source}, but {', '.join(missing)} is missing"))
+            continue
         cmd, files = command(tool, source, base, changed)
-        if "FILES" in tool[4] and not files:
+        if set(tool[4]) & {"FILES", "FILELIST"} and not files:
             out.append(finding(name, "pass", "no changed files for this tool"))
             continue
         exe = shutil.which(cmd[0])
         if not exe:
             out.append(finding(name, "not-run", f"configured in {source}, but {cmd[0]} is not on PATH"))
+            continue
+        if exe.lower().endswith((".cmd", ".bat")) and any(UNSAFE & set(f) for f in files):
+            out.append(finding(name, "not-run", "a changed file name has a character that cmd.exe would run"))
             continue
         r = subprocess.run([exe] + cmd[1:], cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
         tail = (r.stdout + r.stderr).strip().splitlines()[-5:]
@@ -119,8 +140,8 @@ def main(argv):
     parser.add_argument("--list", action="store_true", help="show detection only; run nothing")
     args = parser.parse_args(argv)
     root = args.root.resolve()
-    diff = subprocess.run(["git", "-C", str(root), "diff", "--name-only", args.base], capture_output=True, text=True)
-    changed = [f for f in diff.stdout.split() if (root / f).is_file()]
+    diff = subprocess.run(["git", "-C", str(root), "diff", "--name-only", "--relative", "-z", args.base], capture_output=True, text=True, encoding="utf-8")
+    changed = [f for f in diff.stdout.split("\0") if f and (root / f).is_file()]
     if args.list:
         for tool, source in detect(root, changed):
             print(f"{tool[0]:24} {source or 'not configured'}")

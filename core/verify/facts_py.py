@@ -45,7 +45,7 @@ def passthrough(fn):
     names = params(fn)
     if names and names[0] in ("self", "cls"):
         names = names[1:]
-    return args == names and not fn.decorator_list
+    return bool(names) and args == names and not fn.decorator_list
 
 
 def signature(fn):

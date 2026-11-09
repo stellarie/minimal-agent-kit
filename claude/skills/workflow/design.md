@@ -90,7 +90,7 @@ Read `proof.md`. Check the plan before any code exists.
 
 Test each assumed row and each risky K row before the human approves. Skip this step when no row needs it (`lazy`).
 
-1. Use the spike sandbox. If it does not exist, ask the human, then run `tools/sandbox.py <dest>` once.
+1. Use the spike sandbox. If it does not exist, ask the human, then run `tools/sandbox.py <dest>` once from the kit checkout.
 2. In the sandbox, make a branch `spike/<task>` from a clean `main`.
 3. Write the slice under test from its pseudocode and contract. Do not copy project source.
 4. Mock each dependency. Give each mock the ID of its assumed row.

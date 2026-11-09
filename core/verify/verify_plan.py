@@ -12,8 +12,11 @@ import re
 import sys
 
 STRENGTHS = {"proved", "tested", "assumed"}
-REF = re.compile(r"^(?P<file>[^:\s]+):(?P<line>\d+)$")
+REF = re.compile(r"^(?P<file>(?:[A-Za-z]:)?[^:\s]+):(?P<line>\d+)$")
+REFS = re.compile(r"(?:[A-Za-z]:)?[^\s,;():]+:\d+")
 TEST_FILE = re.compile(r"(^test_.*\.py$|_test\.py$|\.(test|spec)\.[cm]?[jt]sx?$)")
+SKIP_DIRS = {"node_modules", ".git", ".venv", "venv", "dist", "build", "site-packages", "__pycache__"}
+REQUIRED = {"slices": ["id"], "claims": ["id"], "inputs": ["field"], "pseudocode": ["line"], "composition": ["id"], "parts": ["name"]}
 
 
 def finding(fid, check, detail, file="", line=0, level="fail"):
@@ -27,21 +30,39 @@ def ref_error(root, ref):
     path = root / m["file"]
     if not path.is_file():
         return f"{m['file']} does not exist"
-    lines = path.read_text(encoding="utf-8", errors="replace").count("\n") + 1
-    if int(m["line"]) > lines:
-        return f"{ref} is past the end of the file ({lines} lines)"
+    lines = len(path.read_text(encoding="utf-8", errors="replace").splitlines())
+    if not 1 <= int(m["line"]) <= lines:
+        return f"{ref} is outside the file ({lines} lines)"
     return None
 
 
-def check_refs(plan, root):
+def check_keys(plan, root):
     out = []
+    groups = [("parts", plan.get("parts", [])), ("composition", plan.get("composition", [])), ("slices", plan.get("slices", []))]
+    for s in plan.get("slices", []):
+        groups += [(k, s.get(k, [])) for k in ("claims", "inputs", "pseudocode")]
+    for kind, items in groups:
+        for n, item in enumerate(items):
+            for key in REQUIRED[kind]:
+                if not isinstance(item, dict) or key not in item:
+                    out.append(finding(f"schema:{kind}[{n}].{key}", "schema", f"{kind} entry {n} has no {key!r}"))
+    return out
+
+
+def refs_in(plan, phase):
     refs = [(k["id"], k.get("justification", "")) for k in plan.get("composition", [])]
     for s in plan.get("slices", []):
         refs += [(f"{s['id']}.{i['field']}", i.get("source", "")) for i in s.get("inputs", [])]
-        refs += [(c["id"], c.get("evidence", "")) for c in s.get("claims", [])]
-        refs += [(f"{s['id']}.line{p['line']}", p.get("done", "")) for p in s.get("pseudocode", [])]
-    for owner, text in refs:
-        for ref in re.findall(r"[^\s,;()]+:\d+", text or ""):
+        if phase >= 2:
+            refs += [(c["id"], c.get("evidence", "")) for c in s.get("claims", [])]
+            refs += [(f"{s['id']}.line{p['line']}", p.get("done", "")) for p in s.get("pseudocode", [])]
+    return refs
+
+
+def check_refs(plan, root, phase=1):
+    out = []
+    for owner, text in refs_in(plan, phase):
+        for ref in REFS.findall(text or ""):
             err = ref_error(root, ref)
             if err:
                 file, line = ref.rsplit(":", 1)
@@ -108,7 +129,10 @@ def check_confluence(plan, root):
     for s in plan.get("slices", []):
         for other in s.get("parallel", []):
             pair = tuple(sorted((s["id"], other)))
-            if pair in seen or other not in slices:
+            if other not in slices:
+                out.append(finding(f"confluence:{s['id']}-{other}", "confluence", f"parallel slice {other} does not exist"))
+                continue
+            if pair in seen:
                 continue
             seen.add(pair)
             (wa, ra), (wb, rb) = touched(s), touched(slices[other])
@@ -128,33 +152,47 @@ def check_done(plan, root):
     ]
 
 
-def check_scenarios(plan, root):
-    text = ""
+TEST_NAME = re.compile(r"(?:def\s+(test\w*)|\b(?:test|it|describe)\(\s*[\"'`]([^\"'`]*))")
+
+
+def test_names(root):
+    names = []
     for path in root.rglob("*"):
         parts = path.relative_to(root).parts
-        if "node_modules" in parts or ".git" in parts or not TEST_FILE.search(path.name):
+        if SKIP_DIRS & set(parts) or not TEST_FILE.search(path.name):
             continue
-        text += path.read_text(encoding="utf-8", errors="replace")
-    return [
-        finding(f"scenario:{sc}", "scenario", "no test file names this scenario")
-        for s in plan.get("slices", [])
-        for sc in s.get("scenarios", [])
-        if sc not in text
-    ]
+        text = path.read_text(encoding="utf-8", errors="replace")
+        names += [a or b for a, b in TEST_NAME.findall(text)]
+    return names
+
+
+def check_scenarios(plan, root):
+    names = test_names(root)
+    out = []
+    for s in plan.get("slices", []):
+        for sc in s.get("scenarios", []):
+            pattern = re.compile(r"(?<![A-Za-z0-9])" + re.escape(sc) + r"(?![A-Za-z0-9])")
+            if not any(pattern.search(n) for n in names):
+                out.append(finding(f"scenario:{sc}", "scenario", "no test name contains this scenario ID"))
+    return out
 
 
 RULES = {
-    1: [check_refs, check_sources, check_lazy, check_composition, check_strength, check_confluence],
+    1: [check_keys, check_refs, check_sources, check_lazy, check_composition, check_strength, check_confluence],
     2: [check_done, check_scenarios],
 }
 
 
 def verify(plan, root, phase, extra=()):
-    found = []
+    found = check_keys(plan, root)
+    if found:
+        return found, found
     for level in sorted(RULES):
         if level <= phase:
             for rule in RULES[level]:
-                found += rule(plan, root)
+                if rule is check_keys:
+                    continue
+                found += rule(plan, root, phase) if rule is check_refs else rule(plan, root)
     found += list(extra)
     accepted = set(plan.get("accepted", []))
     blocking = [f for f in found if f["level"] == "fail" and f["id"] not in accepted]
@@ -169,8 +207,8 @@ def main(argv):
     parser.add_argument("--findings", type=pathlib.Path, nargs="*", default=[])
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
-    plan = json.loads(args.plan.read_text(encoding="utf-8"))
-    extra = [f for path in args.findings for f in json.loads(path.read_text(encoding="utf-8"))]
+    plan = json.loads(args.plan.read_text(encoding="utf-8-sig"))
+    extra = [f for path in args.findings for f in json.loads(path.read_text(encoding="utf-8-sig"))]
     found, blocking = verify(plan, args.root.resolve(), args.phase, extra)
     if args.json:
         print(json.dumps(found, indent=1))

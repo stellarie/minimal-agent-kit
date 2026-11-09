@@ -35,12 +35,24 @@ The plan file is the design in JSON. `verify_plan.py` checks it. Keep it next to
 | `inputs[].source` | `S#.<output>` from a slice in `depends`, or a `file:line` in the current system |
 | `effects` | Reads and writes of the slice (`pure-slice`). `confluence` compares them for parallel slices. |
 | `calls` | Effect calls the slice is allowed to make, for example `open` or `requests.get` |
-| `interface` | Public symbols the slice may add, change, or remove |
+| `interface` | Public symbols the slice may add, change, or remove. See "Interface items". |
 | `claims[].strength` | `proved`, `tested`, or `assumed` |
 | `pseudocode[].done` | The code `file:line` of the line. Empty in Phase 1. |
 | `accepted` | Finding IDs the human accepted |
 
 Paths are relative to the project root.
+Phase 1 checks only `source` and `justification` references. Phase 2 and Phase 3 also check `evidence` and `done`, because the code and tests exist then.
+
+## Interface items
+
+`ast_checks.py` compares the public interface of each changed file at the base and at the head.
+
+| Code | Item | Plan entry |
+|---|---|---|
+| Python function or class | `render(rows, config)`, `class Report` | the name, or `module.name`: `report.render` |
+| JS export | `export render`, `export default` | the item, exactly |
+| Express route | `route GET /users/:id` | the item, exactly |
+| React props | `props Card{title,onClose}` | the item, exactly |
 
 ## Finding
 

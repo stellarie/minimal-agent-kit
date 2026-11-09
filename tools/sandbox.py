@@ -26,8 +26,8 @@ def step(cmd, cwd):
 
 
 def init(dest, install=True):
-    if dest.exists() and any(dest.iterdir()):
-        print(f"refused: {dest} is not empty")
+    if dest.exists() and (not dest.is_dir() or any(dest.iterdir())):
+        print(f"refused: {dest} is not an empty directory")
         return 2
     shutil.copytree(TEMPLATE, dest, dirs_exist_ok=True, ignore=shutil.ignore_patterns("node_modules", ".venv", "__pycache__"))
     for cmd in (["git", "init", "-q", "-b", "main"], ["git", "add", "-A"], ["git", "commit", "-q", "-m", "Seed spike sandbox"]):

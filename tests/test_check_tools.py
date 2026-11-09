@@ -58,6 +58,28 @@ class DetectTests(unittest.TestCase):
         ruff = next(f for f in found if f["id"] == "tool:ruff")
         self.assertEqual("not-run", ruff["level"])
 
+    def test_unsafe_name_not_passed_to_cmd_shim(self):
+        (self.root / "package.json").write_text('{"devDependencies": {"eslint": "9"}}')
+        with mock.patch.object(tools.shutil, "which", return_value="C:/n/npx.cmd"), \
+             mock.patch.object(tools.subprocess, "run") as run:
+            found = tools.run(self.root, "HEAD", ["y&hostname&.js"])
+        eslint = next(f for f in found if f["id"] == "tool:eslint")
+        self.assertEqual("not-run", eslint["level"])
+        run.assert_not_called()
+
+    def test_audit_skipped_when_lockfile_unchanged(self):
+        (self.root / "package-lock.json").write_text("{}")
+        (self.root / "package.json").write_text("{}")
+        found = tools.run(self.root, "HEAD", ["a.js"])
+        audit = next(f for f in found if f["id"] == "tool:npm-audit")
+        self.assertEqual("pass", audit["level"])
+
+    def test_diff_cover_without_report_is_not_run(self):
+        (self.root / "requirements.txt").write_text("diff-cover==9\n")
+        found = tools.run(self.root, "HEAD", ["a.py"])
+        cover = next(f for f in found if f["id"] == "tool:diff-cover")
+        self.assertEqual("not-run", cover["level"])
+
 
 if __name__ == "__main__":
     unittest.main()

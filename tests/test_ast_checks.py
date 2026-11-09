@@ -101,7 +101,7 @@ class AstChecksTests(unittest.TestCase):
 
     def test_eta(self):
         self.write("a.py", "def keep(x):\n    return other(x)\n")
-        self.assertIn("eta:a.py:keep", self.ids())
+        self.assertIn("eta:a.py:keep:1", self.ids())
 
     def test_effect_not_in_calls(self):
         self.write("a.py", "def keep(x):\n    print(x)\n    return x\n")
@@ -126,6 +126,29 @@ class AstChecksTests(unittest.TestCase):
         self.plan["slices"][0]["files"].append("app.js")
         self.write("app.js", "app.get('/x', h);\n")
         self.assertIn("interface:app.js:route GET /x", self.ids())
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_planned_route_is_exact(self):
+        self.plan["slices"][0]["files"].append("app.js")
+        self.write("app.js", "app.get('/users/:id', h);\napp.get('/teams/:id', h);\n")
+        self.plan["slices"][0]["interface"] = ["route GET /users/:id"]
+        self.assertEqual({"interface:app.js:route GET /teams/:id"}, self.ids())
+
+    def test_pure_calls_are_not_effects(self):
+        self.write("a.py", "import json\ndef keep(x):\n    items = [x]\n    items.remove(x)\n    return json.dumps(x)\n")
+        self.assertFalse([i for i in self.ids() if i.startswith("effect:")])
+
+    def test_zero_argument_wrapper_is_not_eta(self):
+        self.write("a.py", "def keep(x):\n    return x + 1\n\ndef now():\n    return compute()\n")
+        self.plan["slices"][0]["interface"] = ["now"]
+        self.assertEqual(set(), self.ids())
+
+    def test_subdirectory_root_and_space_in_name(self):
+        sub = self.root / "sub"
+        sub.mkdir()
+        (sub / "my file.py").write_text("X = 1\n")
+        found = {f["id"] for f in ast_checks.run(self.plan, sub, "HEAD", 1)}
+        self.assertEqual({"files:my file.py"}, found)
 
 
 if __name__ == "__main__":

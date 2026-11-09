@@ -148,5 +148,61 @@ class VerifyPlanTests(unittest.TestCase):
         self.assertEqual(1, verify_plan.main(argv + ["--json"]))
 
 
+class ReviewRegressionTests(VerifyPlanTests):
+    def test_scenario_needs_whole_id(self):
+        (self.root / "tests" / "test_a.py").write_text("def test_SC10(): pass\n")
+        self.assertIn("scenario:SC1", self.ids(VALID))
+
+    def test_scenario_ignores_venv(self):
+        venv = self.root / ".venv" / "Lib" / "site-packages"
+        venv.mkdir(parents=True)
+        (venv / "test_x.py").write_text("def test_SC2(): pass\n")
+        p = self.broken()
+        p["slices"][0]["scenarios"] = ["SC2"]
+        self.assertIn("scenario:SC2", self.ids(p))
+
+    def test_jest_test_name(self):
+        (self.root / "tests" / "a.test.js").write_text("test('SC3 returns a name', () => {});\n")
+        p = self.broken()
+        p["slices"][0]["scenarios"] = ["SC3"]
+        self.assertEqual(set(), self.ids(p))
+
+    def test_phase_1_skips_planned_evidence(self):
+        p = self.broken()
+        p["slices"][0]["claims"][0]["evidence"] = "tests/test_new.py:3"
+        self.assertEqual(set(), self.ids(p, phase=1))
+        self.assertIn("ref:C1.1:tests/test_new.py:3", self.ids(p, phase=2))
+
+    def test_line_bounds(self):
+        p = self.broken()
+        p["composition"][0]["justification"] = "a.py:3"
+        self.assertIn("ref:K0:a.py:3", self.ids(p))
+        p["composition"][0]["justification"] = "a.py:0"
+        self.assertIn("ref:K0:a.py:0", self.ids(p))
+
+    def test_drive_path_ref(self):
+        p = self.broken()
+        p["composition"][0]["justification"] = "E:/nowhere/z.py:9"
+        self.assertIn("ref:K0:E:/nowhere/z.py:9", self.ids(p))
+
+    def test_unknown_parallel_slice(self):
+        p = self.broken()
+        p["slices"][1]["parallel"] = ["S9"]
+        self.assertIn("confluence:S2-S9", self.ids(p))
+
+    def test_missing_key_is_a_finding(self):
+        p = self.broken()
+        del p["slices"][0]["claims"][0]["id"]
+        self.assertIn("schema:claims[0].id", self.ids(p))
+
+    def test_bom_files(self):
+        path = self.root / "plan.json"
+        path.write_text(json.dumps(VALID), encoding="utf-8-sig")
+        extra = self.root / "f.json"
+        extra.write_text("[]", encoding="utf-8-sig")
+        argv = [str(path), "--root", str(self.root), "--phase", "2", "--json", "--findings", str(extra)]
+        self.assertEqual(0, verify_plan.main(argv))
+
+
 if __name__ == "__main__":
     unittest.main()

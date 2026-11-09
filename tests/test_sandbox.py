@@ -30,6 +30,10 @@ class SandboxTests(unittest.TestCase):
         self.assertEqual(2, self.init())
         self.assertEqual(["keep.txt"], [p.name for p in self.dest.iterdir()])
 
+    def test_refuses_file(self):
+        self.dest.write_text("x")
+        self.assertEqual(2, self.init())
+
     def test_init_without_install(self):
         self.assertEqual(0, self.init())
         for rel in ("python/faults.py", "js/faults.js", "js/package-lock.json", "js/react/Greeting.jsx", "README.md"):

@@ -75,7 +75,7 @@ function passthrough(fn) {
     else if (a.type === "SpreadElement" && a.argument.type === "Identifier") args.push(a.argument.name);
     else return false;
   }
-  return args.length === names.length && args.every((a, i) => a === names[i]);
+  return names.length > 0 && args.length === names.length && args.every((a, i) => a === names[i]);
 }
 
 function hasJsx(fn) {
