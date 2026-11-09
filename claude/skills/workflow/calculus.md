@@ -7,7 +7,7 @@ Record each result in the design file or the phase output. Write "fail" with the
 
 In Phase 1, no code exists. For a step that needs code, record what you planned, for example "effects listed: 2". Give its pass or fail in Phase 2 and Phase 3.
 These steps need code: pure-slice 3 to 5, signature 4, reduction Phase 2, normal-form, eta 2, termination code step 2, and confluence 3 and 4.
-Give pass or fail in Phase 1 for the other steps: one-concern, lazy, signature 1 to 3, and confluence 1 and 2.
+Give pass or fail in Phase 1 for all other steps that apply in Phase 1. The workflow steps of `termination` run in Phase 2 and Phase 3.
 
 | Check | Run at |
 |---|---|
@@ -90,7 +90,8 @@ Steps in Phase 2:
 3. Annotate each done line with its code `file:line`, for example `# done: report.py:55`.
 4. Does the code need a line that the pseudocode does not have? Add it to the pseudocode first.
    - A new line that adds an effect or a signature field: stop (2.4).
-   - A new line that changes a public interface of this project, or calls code outside the Files of the slice: stop (2.4).
+   - A new line that changes a public interface of this project: stop (2.4).
+   - A new line that calls project code outside the Files of the slice, and the pseudocode does not cite that code with `file:line`: stop (2.4).
    - Any other new line: report it in Notes in the slice output.
 
 Pass: each pseudocode line has a `done:` location, and each code path in the diff maps to a pseudocode line. A code path without a line fails the check.
@@ -145,7 +146,8 @@ Steps for the workflow:
 
 1. The loops are: Red and Green per scenario, fix and test (2.4), and review and fix (3.5).
 2. Record the measure each round. Count failing tests, or open findings that you accept as real. Do not count findings you rejected in 3.5.
-3. Stop when three consecutive rounds do not go below the lowest measure so far. Stop after ten rounds in any case. Report to the human with the measure history.
+3. Scope the measure to one loop instance: one scenario's Red and Green, one failure in 2.4, or one review loop. A new instance starts with no history. A measure of 0 ends the instance.
+4. Stop when three consecutive rounds of one instance do not go below its lowest measure so far. Stop after ten rounds of one instance in any case. Report to the human with the measure history.
 
 Pass: each code loop has the two `file:line` locations from step 2, and each workflow loop reaches zero. Record the history, for example "findings: 13, 6, 1, 0".
 

@@ -58,9 +58,10 @@ Stop when one of these occurs:
 
 - A scenario cannot pass without a change outside the plan.
 - The diff grows past the plan, for example "and while I was there".
-- The failing-test count does not go below its lowest value for three consecutive rounds (`calculus.md` `termination`).
-- A new pseudocode line adds an effect or a signature field (`reduction`).
-- A new pseudocode line changes a public interface of this project, or calls code outside the Files of the slice.
+- One Red and Green instance has three rounds that do not go below its lowest failing-test count, or ten rounds (`calculus.md` `termination`).
+- A new pseudocode line adds an effect or a signature field (`calculus.md` `reduction`).
+- A new pseudocode line changes a public interface of this project (`calculus.md` `reduction`).
+- A new pseudocode line calls project code outside the Files of the slice, and the pseudocode does not cite it with `file:line` (`calculus.md` `reduction`).
 - A claim argument fails against the real code.
 - A small slice grows past about 20 lines (`proof.md`).
 
