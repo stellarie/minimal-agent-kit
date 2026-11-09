@@ -20,7 +20,7 @@ Rules:
 
 - Use the strongest strength you can show. Do not claim more.
 - A claim about all inputs needs `proved`, or `tested` with each input class covered.
-- Each `assumed` row is a risk. List it at the approval gate. The human accepts it by name.
+- Each `assumed` row is a risk. List it at the approval gate. The human accepts it by ID.
 - Small slice: a slice planned at less than about 20 lines, with no invariant, needs only its Post at `tested`. Its K link gives its Pre.
   If the slice grows past about 20 lines in Phase 2, stop and write its full claims.
 
@@ -69,10 +69,12 @@ Use it for a safety claim: "X never happens".
 3. Show a check, type, or earlier claim that stops it.
 
 ```
-Claim C1.2: the guard never allows a recursive rm whose target is an exact entry in dangerous_paths.
-Assume the guard allows `rm -r <t>` with t in dangerous_paths. check_rm sets rec for the -r flag (guard.py:45).
-is_dangerous(t) is true (guard.py:37), so check_rm returns a deny reason (guard.py:51). Contradiction.
-The claim is narrow on purpose: `rm -rf /.` is not an exact entry, so the claim says nothing about it.
+Example, with invented line numbers:
+Claim C1.2: no request reaches save_order() without a valid session.
+Assume a request reaches save_order() with no valid session.
+Each route to save_order() goes through the auth middleware (app.py:14). Show that the list of routes is complete with a search, not by hand.
+The middleware returns 401 before the handler when the session is not valid (auth.py:22). Contradiction.
+Most gaps hide in the first step: the list of each path to the code. Derive it, then prove it is complete.
 ```
 
 ### Contract chaining

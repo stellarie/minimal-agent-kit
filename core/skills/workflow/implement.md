@@ -25,7 +25,7 @@ Before each edit, ask:
 Do these steps for each slice, in plan order:
 
 1. **Re-scan.** Read the files the slice touches, and their tests. Look again for code to reuse.
-2. **Check Pre.** Confirm the Pre of the slice holds. Use the Posts of earlier slices, not their internals.
+2. **Check Pre.** Confirm the Pre of the slice holds. Use the current system and the Posts of earlier slices, not their internals.
 3. **Red.** Write the test for one scenario or claim. Name it from the scenario or claim ID. Run it. It must fail for the right reason.
 4. **Green.** Write the smallest code that passes. Follow the project standards from the scan.
 5. **Run.** Run the slice tests, then the affected suite. All pass.
