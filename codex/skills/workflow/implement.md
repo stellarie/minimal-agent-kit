@@ -57,9 +57,12 @@ Stop when one of these occurs:
 - The diff grows past the plan, for example "and while I was there".
 - Three fixes for one failure do not work.
 - A claim argument fails against the real code.
+- A small slice grows past about 20 lines (`proof.md`).
 
 Then report: what you found, the evidence, and two options. Wait for the human.
-If the slice contract holds, redo only that slice. If the contract must change, go back to Phase 1 for that slice and each slice that depends on it.
+
+If the slice contract holds, redo only that slice. If the contract must change, go back to Phase 1 for that slice and each slice that depends on it. Check their K links again.
+If a claim drops to `assumed`, report it. The human accepts it by ID before the work continues.
 
 ## 2.5 Output
 

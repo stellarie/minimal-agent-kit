@@ -13,18 +13,20 @@ Give the subagent only these inputs:
 
 - the diff, or the base and head commits
 - the design file and its scenarios
-- this file
+- this file, `proof.md`, and `slicing.md`
 
 Do not give it your conclusions. A fresh reader does not share your assumptions.
 
 The subagent reviews by refutation. For each claim and composition link in the obligation table (`proof.md`):
 
 1. Try to build a counterexample: an input, a state, or a call order that makes the claim false.
-2. Check each `file:line` in the argument against the diff.
+2. Check each `file:line` in the argument against the code at the head commit.
 3. Check that the strength is honest. A `proved` row with a gap is `tested` at best.
 4. Report each row: holds, broken with the counterexample, or weaker than stated.
 
-A broken claim sends its slice back to Phase 2. A broken composition link sends the plan back to Phase 1.
+A broken claim with its contract unchanged sends its slice back to Phase 2.
+A fix that changes a contract sends the slice and each slice that depends on it back to Phase 1. Check their K links again.
+A broken composition link sends the plan back to Phase 1.
 
 The subagent returns findings. You fix them, then send the new diff for one more review.
 If the harness cannot start a subagent, stop. Tell the human. Do not review the work yourself.
@@ -97,6 +99,11 @@ Behaviour: <scenario: observed outcome>
 ## Claims
 | ID | Strength | Refutation result |
 |---|---|---|
+
+## New assumed rows
+- <claim or link ID>: <statement> - new or downgraded since design approval
+
+Accept each new assumed row by ID.
 
 ## Diff
 <n files, +added -removed lines>

@@ -74,7 +74,8 @@ Read `proof.md`. Check the plan before any code exists.
 3. Write the argument against the current code and the planned change. Cite `file:line`.
 4. Give each claim and each composition link a strength: proved, tested, or assumed.
 5. List failure modes. Map each one to a claim, a check, or a named residual risk.
-6. If a claim or link has no argument, change the slices. Do not present a plan with a gap.
+6. If a claim or link has no argument and no source, change the slices. Do not present a plan with a gap.
+7. For a small slice, use the small-slice rule in `proof.md`.
 
 ## 1.8 Present
 
@@ -120,7 +121,7 @@ Blast radius: <callers and consumers>
 <obligation table from proof.md>
 
 ## Assumed
-- <claim ID>: <statement> - source <source> - risk if false <effect>
+- <claim or link ID>: <statement> - source <source> - risk if false <effect>
 
 ## Failure modes
 | Failure | Claim, check, or residual |

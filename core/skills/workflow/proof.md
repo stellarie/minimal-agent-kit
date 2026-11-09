@@ -21,7 +21,8 @@ Rules:
 - Use the strongest strength you can show. Do not claim more.
 - A claim about all inputs needs `proved`, or `tested` with each input class covered.
 - Each `assumed` row is a risk. List it at the approval gate. The human accepts it by name.
-- A slice of less than about 20 lines with no invariant needs only Pre and Post at `tested`.
+- Small slice: a slice planned at less than about 20 lines, with no invariant, needs only its Post at `tested`. Its K link gives its Pre.
+  If the slice grows past about 20 lines in Phase 2, stop and write its full claims.
 
 ## Techniques
 
@@ -68,19 +69,22 @@ Use it for a safety claim: "X never happens".
 3. Show a check, type, or earlier claim that stops it.
 
 ```
-Claim C1.2: the guard never allows rm on a dangerous path.
-Assume rm runs on "/". The PreToolUse hook sends each Bash call to guard.py.
-guard.py:37 finds "/" in DANGEROUS, so the guard denies the call. Contradiction.
+Claim C1.2: the guard never allows a recursive rm whose target is an exact entry in dangerous_paths.
+Assume the guard allows `rm -r <t>` with t in dangerous_paths. check_rm sets rec for the -r flag (guard.py:45).
+is_dangerous(t) is true (guard.py:37), so check_rm returns a deny reason (guard.py:51). Contradiction.
+The claim is narrow on purpose: `rm -rf /.` is not an exact entry, so the claim says nothing about it.
 ```
 
 ### Contract chaining
 
-Use it for composition rows. Show that each statement in Pre(Sn+1) follows from the Posts before it.
+Use it for composition rows. Show that each statement in Pre(Sn+1) follows from the current system and the Posts before it.
+Show that no later slice makes an earlier Post false, unless that slice names the Post it replaces.
 Cite the Post by slice ID. Do not reason from slice internals.
 
 ## Obligation table
 
 Put this table in the design file. One row per claim and one row per composition link.
+For a composition link, write the justification in the Composition table only. Here, write "see K#".
 
 ```
 ## Proof obligations
@@ -88,7 +92,7 @@ Put this table in the design file. One row per claim and one row per composition
 |---|---|---|---|---|---|
 | C1.1 | <statement> | case analysis | proved | <steps with file:line> | <test name> |
 | C1.2 | <statement> | - | assumed | <source> | - |
-| K1 | Post(S1) satisfies Pre(S2) | chaining | proved | <argument> | - |
+| K1 | Post(S1) satisfies Pre(S2) | chaining | proved | see K1 | - |
 ```
 
 ## Tests for claims
@@ -96,5 +100,5 @@ Put this table in the design file. One row per claim and one row per composition
 - Name each test after its claim, for example `test_c2_1_parse_empty_raises`.
 - Cover each case from a case analysis with at least one test.
 - Prefer a property-based test (Hypothesis, fast-check) for a claim about all inputs, when the project has the library.
-- A test that names no claim or scenario is decoration. Delete it or give it a claim.
+- Each test that this change adds names a claim or a scenario. Do not delete existing project tests for this rule.
 - Check that each test can fail: break the code for a moment, see the test fail, then restore the code.
