@@ -17,6 +17,11 @@ REFS = re.compile(r"(?<![\w/])(?:[A-Za-z]:[\\/])?[^\s,;():]+:\d+")
 URL = re.compile(r"\w+://\S+")
 TEST_FILE = re.compile(r"(^test_.*\.py$|_test\.py$|\.(test|spec)\.[cm]?[jt]sx?$)")
 SKIP_DIRS = {"node_modules", ".git", ".venv", "venv", "dist", "build", "site-packages", "__pycache__"}
+TEXT_FIELDS = {
+    "parts": ["acceptance"], "composition": ["justification", "statement"], "inputs": ["source"],
+    "claims": ["evidence", "strength"], "pseudocode": ["done", "text"],
+}
+LIST_FIELDS = {"slices": ["scenarios", "depends", "parallel", "files", "calls", "interface", "outputs"]}
 REQUIRED = {"slices": ["id"], "claims": ["id"], "inputs": ["field"], "pseudocode": ["line"], "composition": ["id"], "parts": ["name"]}
 
 
@@ -57,8 +62,13 @@ def check_keys(plan, root):
                 value = item.get(key)
                 if isinstance(value, bool) or not isinstance(value, (str, int)):
                     out.append(finding(f"schema:{kind}[{n}].{key}", "schema", f"{kind} entry {n} has no {key!r}"))
-            if kind == "parts" and not isinstance(item.get("acceptance", ""), str):
-                out.append(finding(f"schema:parts[{n}].acceptance", "schema", "acceptance must be one ID as text"))
+            for key in TEXT_FIELDS.get(kind, ()):
+                if not isinstance(item.get(key, ""), str):
+                    out.append(finding(f"schema:{kind}[{n}].{key}", "schema", f"{key!r} must be text"))
+            for key in LIST_FIELDS.get(kind, ()):
+                value = item.get(key, [])
+                if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+                    out.append(finding(f"schema:{kind}[{n}].{key}", "schema", f"{key!r} must be a list of text"))
             if kind == "slices":
                 for sub in ("claims", "inputs", "pseudocode"):
                     if isinstance(item.get(sub, []), list):

@@ -211,6 +211,13 @@ class ReviewRegressionTests(VerifyPlanTests):
         p = self.broken()
         p["parts"] = [{"name": "p", "acceptance": ["A1"]}]
         self.assertIn("schema:parts[0].acceptance", self.ids(p))
+        p = self.broken()
+        p["composition"][0]["justification"] = 5
+        p["slices"][0]["scenarios"] = "SC1"
+        p["slices"][2]["depends"] = "S10"
+        ids = self.ids(p)
+        for fid in ("schema:composition[0].justification", "schema:slices[0].scenarios", "schema:slices[2].depends"):
+            self.assertIn(fid, ids)
         found, blocking = verify_plan.verify([], self.root, 1)
         self.assertEqual(["schema:top"], [f["id"] for f in blocking])
 
