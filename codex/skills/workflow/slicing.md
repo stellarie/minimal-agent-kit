@@ -46,10 +46,15 @@ Each link is one row in the composition table. A link with no justification is a
 ### S1: <name> - risk <high | medium | low> - depends on <none | S#>
 Files: <paths>
 Scenarios: <ids>
+Signature: S1: {<field: type>} -> {<field: type>}
+Concern: <one sentence, no "and">
+Effects: <reads and writes, or "none">
 Pre: <statement>
 Post: <statement>
 Invariant: <statement, or "none">
 Claims: C1.1, C1.2
+Pseudocode:
+  <calls and branches; mark reuse with file:line and claims with their ID>
 
 ### S2: ...
 

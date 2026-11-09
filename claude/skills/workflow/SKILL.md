@@ -28,6 +28,7 @@ Guiding question for every phase: what is the minimal amount of code and impact 
 
 - `slicing.md`: slices with contracts, and the composition table.
 - `proof.md`: claims, strength, proof techniques, and the obligation table.
+- `calculus.md`: nine checks with steps and pass conditions: purity, signatures, one concern, pseudocode reduction, normal form, confluence, eta, termination, laziness.
 - `bdd.md`: scenario format.
 - `diagram.md`: diagram style.
 - `blackboard.md`: task file for subagents.
