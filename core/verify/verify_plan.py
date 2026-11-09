@@ -13,7 +13,8 @@ import sys
 
 STRENGTHS = {"proved", "tested", "assumed"}
 REF = re.compile(r"^(?P<file>(?:[A-Za-z]:)?[^:\s]+):(?P<line>\d+)$")
-REFS = re.compile(r"(?:[A-Za-z]:)?[^\s,;():]+:\d+")
+REFS = re.compile(r"(?<![\w/])(?:[A-Za-z]:[\\/])?[^\s,;():]+:\d+")
+URL = re.compile(r"\w+://\S+")
 TEST_FILE = re.compile(r"(^test_.*\.py$|_test\.py$|\.(test|spec)\.[cm]?[jt]sx?$)")
 SKIP_DIRS = {"node_modules", ".git", ".venv", "venv", "dist", "build", "site-packages", "__pycache__"}
 REQUIRED = {"slices": ["id"], "claims": ["id"], "inputs": ["field"], "pseudocode": ["line"], "composition": ["id"], "parts": ["name"]}
@@ -37,16 +38,40 @@ def ref_error(root, ref):
 
 
 def check_keys(plan, root):
+    if not isinstance(plan, dict):
+        return [finding("schema:top", "schema", "the plan must be a JSON object")]
     out = []
-    groups = [("parts", plan.get("parts", [])), ("composition", plan.get("composition", [])), ("slices", plan.get("slices", []))]
-    for s in plan.get("slices", []):
-        groups += [(k, s.get(k, [])) for k in ("claims", "inputs", "pseudocode")]
-    for kind, items in groups:
+    queue = []
+    for key in ("parts", "composition", "slices", "acceptance", "accepted"):
+        if not isinstance(plan.get(key, []), list):
+            out.append(finding(f"schema:{key}", "schema", f"{key!r} must be a list"))
+        elif key in REQUIRED:
+            queue.append((key, plan.get(key, [])))
+    while queue:
+        kind, items = queue.pop(0)
         for n, item in enumerate(items):
+            if not isinstance(item, dict):
+                out.append(finding(f"schema:{kind}[{n}]", "schema", f"{kind} entry {n} must be an object"))
+                continue
             for key in REQUIRED[kind]:
-                if not isinstance(item, dict) or key not in item:
+                value = item.get(key)
+                if isinstance(value, bool) or not isinstance(value, (str, int)):
                     out.append(finding(f"schema:{kind}[{n}].{key}", "schema", f"{kind} entry {n} has no {key!r}"))
+            if kind == "parts" and not isinstance(item.get("acceptance", ""), str):
+                out.append(finding(f"schema:parts[{n}].acceptance", "schema", "acceptance must be one ID as text"))
+            if kind == "slices":
+                for sub in ("claims", "inputs", "pseudocode"):
+                    if isinstance(item.get(sub, []), list):
+                        queue.append((sub, item.get(sub, [])))
+                    else:
+                        out.append(finding(f"schema:slices[{n}].{sub}", "schema", f"{sub!r} must be a list"))
     return out
+
+
+def load_json(path):
+    data = path.read_bytes()
+    text = data.decode("utf-16") if data[:2] in (b"\xff\xfe", b"\xfe\xff") else data.decode("utf-8-sig")
+    return json.loads(text)
 
 
 def refs_in(plan, phase):
@@ -62,7 +87,7 @@ def refs_in(plan, phase):
 def check_refs(plan, root, phase=1):
     out = []
     for owner, text in refs_in(plan, phase):
-        for ref in REFS.findall(text or ""):
+        for ref in REFS.findall(URL.sub(" ", text or "")):
             err = ref_error(root, ref)
             if err:
                 file, line = ref.rsplit(":", 1)
@@ -152,7 +177,10 @@ def check_done(plan, root):
     ]
 
 
-TEST_NAME = re.compile(r"(?:def\s+(test\w*)|\b(?:test|it|describe)\(\s*[\"'`]([^\"'`]*))")
+TEST_NAME = re.compile(
+    r"(?:def\s+(test\w*)|class\s+Test_?(\w+)"
+    r"|\b(?:test|it|describe)(?:\.\w+)*(?:\([^()]*\))?\(\s*[\"'`]([^\"'`]*))"
+)
 
 
 def test_names(root):
@@ -162,7 +190,7 @@ def test_names(root):
         if SKIP_DIRS & set(parts) or not TEST_FILE.search(path.name):
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        names += [a or b for a, b in TEST_NAME.findall(text)]
+        names += [a or b or c for a, b, c in TEST_NAME.findall(text)]
     return names
 
 
@@ -171,7 +199,7 @@ def check_scenarios(plan, root):
     out = []
     for s in plan.get("slices", []):
         for sc in s.get("scenarios", []):
-            pattern = re.compile(r"(?<![A-Za-z0-9])" + re.escape(sc) + r"(?![A-Za-z0-9])")
+            pattern = re.compile(r"(?<![A-Za-z0-9])" + re.escape(sc) + r"(?![A-Za-z0-9])", re.I)
             if not any(pattern.search(n) for n in names):
                 out.append(finding(f"scenario:{sc}", "scenario", "no test name contains this scenario ID"))
     return out
@@ -207,8 +235,8 @@ def main(argv):
     parser.add_argument("--findings", type=pathlib.Path, nargs="*", default=[])
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
-    plan = json.loads(args.plan.read_text(encoding="utf-8-sig"))
-    extra = [f for path in args.findings for f in json.loads(path.read_text(encoding="utf-8-sig"))]
+    plan = load_json(args.plan)
+    extra = [f for path in args.findings for f in load_json(path)]
     found, blocking = verify(plan, args.root.resolve(), args.phase, extra)
     if args.json:
         print(json.dumps(found, indent=1))

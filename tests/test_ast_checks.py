@@ -136,7 +136,28 @@ class AstChecksTests(unittest.TestCase):
 
     def test_pure_calls_are_not_effects(self):
         self.write("a.py", "import json\ndef keep(x):\n    items = [x]\n    items.remove(x)\n    return json.dumps(x)\n")
-        self.assertFalse([i for i in self.ids() if i.startswith("effect:")])
+        fails = [f for f in ast_checks.run(self.plan, self.root, "HEAD", 1) if f["level"] == "fail"]
+        self.assertEqual([], fails)
+
+    def test_module_helpers_are_not_effects(self):
+        self.write("a.py", "import os, pickle\ndef keep(x):\n    pickle.dumps(x)\n    return os.path.join('a', x)\n")
+        self.assertEqual(set(), self.ids())
+
+    def test_database_call_is_a_note(self):
+        self.write("a.py", "def keep(conn):\n    conn.execute('DELETE FROM t')\n    return conn\n")
+        found = ast_checks.run(self.plan, self.root, "HEAD", 1)
+        levels = {f["id"]: f["level"] for f in found}
+        self.assertEqual("consider", levels.get("effect:a.py:conn.execute:2"))
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_planned_props_change(self):
+        self.plan["slices"][0]["files"].append("c.jsx")
+        self.write("c.jsx", "export const n = 1;\nfunction Card({ title }) { return <p>{title}</p>; }\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "card")
+        self.write("c.jsx", "export const n = 1;\nfunction Card({ title, onClose }) { return <p>{title}</p>; }\n")
+        self.plan["slices"][0]["interface"] = ["props Card{title,onClose}"]
+        self.assertEqual(set(), self.ids())
 
     def test_zero_argument_wrapper_is_not_eta(self):
         self.write("a.py", "def keep(x):\n    return x + 1\n\ndef now():\n    return compute()\n")

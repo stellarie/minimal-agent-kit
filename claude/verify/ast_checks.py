@@ -15,16 +15,23 @@ import subprocess
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import verify_plan  # noqa: E402
 PY = {".py"}
 JS = {".js", ".mjs", ".cjs", ".jsx"}
 EFFECTS = re.compile(
     r"^(open|print|input|exec|eval|fetch|require)$"
-    r"|^(os|shutil|subprocess|requests|httpx|urllib|socket|random|logging|pickle|sqlite3|fs|http|https"
+    r"|^os\.(remove|unlink|rmdir|removedirs|rename|replace|system|popen|mkdir|makedirs|chmod|chown|kill|putenv|listdir|scandir|walk|stat)$"
+    r"|^os\.path\.(exists|isfile|isdir|getsize|getmtime)$"
+    r"|^(shutil|subprocess|requests|httpx|urllib|socket|random|logging|sqlite3|fs|http|https"
     r"|child_process|axios|localStorage|sessionStorage|console)\."
     r"|^(os\.environ|os\.getenv|process\.env|process\.exit|time\.time|time\.sleep|Math\.random|Date\.now)"
     r"|^(json\.dump|pickle\.dump)$"
     r"|\.(write_text|write_bytes|writeFile|writeFileSync|appendFile|appendFileSync|unlink|unlinkSync|rmdir|mkdir|rmSync)$"
 )
+# Method names that often mean an effect, but also name pure methods such as list.remove.
+# A hit is reported at level "consider" and never blocks.
+MAYBE = re.compile(r"\.(write|send|query|execute|executemany|commit|remove|post|put|delete|insert|update|emit)$")
 HUNK = re.compile(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@", re.M)
 
 
@@ -80,7 +87,10 @@ def allowed(name, entries):
 
 def planned(item, entries):
     """Route, props, and export items must match an entry exactly. Python items match by symbol name."""
-    if item.split(" ", 1)[0] in ("route", "props", "export"):
+    kind = item.split(" ", 1)[0]
+    if kind == "props":
+        return any(e.split("{")[0] == item.split("{")[0] for e in entries)
+    if kind in ("route", "export"):
         return item in entries
     words = re.findall(r"[A-Za-z_$][\w$]*", item.split("(")[0])
     name = words[-1] if words else item
@@ -115,7 +125,12 @@ def check_file(plan, root, base, rel, phase):
         if fn["passthrough"]:
             out.append(finding(f"eta:{rel}:{fn['name']}:{fn['start']}", "eta", "function only passes its parameters to one call", rel, fn["start"]))
     for c in head["calls"]:
-        if c["line"] in lines and EFFECTS.search(c["name"]) and not allowed(c["name"], owner.get("calls", [])):
+        if c["line"] not in lines or allowed(c["name"], owner.get("calls", [])):
+            continue
+        if MAYBE.search(c["name"]) and not EFFECTS.search(c["name"]):
+            detail = f"{c['name']} may be an effect; if it is, add it to {owner['id']} calls"
+            out.append(finding(f"effect:{rel}:{c['name']}:{c['line']}", "pure-slice", detail, rel, c["line"], level="consider"))
+        elif EFFECTS.search(c["name"]):
             out.append(finding(f"effect:{rel}:{c['name']}", "pure-slice", f"effect call {c['name']} is not in {owner['id']} calls", rel, c["line"]))
     if phase >= 2:
         done = done_lines(plan, rel)
@@ -146,7 +161,7 @@ def main(argv):
     parser.add_argument("--phase", type=int, choices=(1, 2, 3), default=2)
     parser.add_argument("files", nargs="*")
     args = parser.parse_args(argv)
-    plan = json.loads(args.plan.read_text(encoding="utf-8-sig"))
+    plan = verify_plan.load_json(args.plan)
     found = run(plan, args.root.resolve(), args.base, args.phase, args.files)
     print(json.dumps(found, indent=1))
     return 1 if any(f["level"] == "fail" for f in found) else 0

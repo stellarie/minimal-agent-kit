@@ -195,6 +195,33 @@ class ReviewRegressionTests(VerifyPlanTests):
         del p["slices"][0]["claims"][0]["id"]
         self.assertIn("schema:claims[0].id", self.ids(p))
 
+    def test_url_with_port_is_not_a_ref(self):
+        p = self.broken()
+        p["composition"][0]["justification"] = "spec at https://example.invalid:8443/x and a.py:1"
+        self.assertEqual(set(), self.ids(p))
+
+    def test_more_test_name_forms(self):
+        (self.root / "tests" / "test_b.py").write_text("class TestSC4:\n    def test_ok(self): pass\n\ndef test_sc5_lower(): pass\n")
+        (self.root / "tests" / "b.test.js").write_text("test.each([[1]])('SC6 case %s', () => {});\nit.only('SC7', () => {});\n")
+        p = self.broken()
+        p["slices"][0]["scenarios"] = ["SC4", "SC5", "SC6", "SC7"]
+        self.assertEqual(set(), self.ids(p))
+
+    def test_bad_types_are_findings(self):
+        p = self.broken()
+        p["parts"] = [{"name": "p", "acceptance": ["A1"]}]
+        self.assertIn("schema:parts[0].acceptance", self.ids(p))
+        found, blocking = verify_plan.verify([], self.root, 1)
+        self.assertEqual(["schema:top"], [f["id"] for f in blocking])
+
+    def test_utf16_findings(self):
+        path = self.root / "plan.json"
+        path.write_text(json.dumps(VALID))
+        extra = self.root / "f.json"
+        extra.write_text("[]", encoding="utf-16")
+        argv = [str(path), "--root", str(self.root), "--phase", "2", "--json", "--findings", str(extra)]
+        self.assertEqual(0, verify_plan.main(argv))
+
     def test_bom_files(self):
         path = self.root / "plan.json"
         path.write_text(json.dumps(VALID), encoding="utf-8-sig")

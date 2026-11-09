@@ -52,7 +52,7 @@ Phase 1 checks only `source` and `justification` references. Phase 2 and Phase 3
 | Python function or class | `render(rows, config)`, `class Report` | the name, or `module.name`: `report.render` |
 | JS export | `export render`, `export default` | the item, exactly |
 | Express route | `route GET /users/:id` | the item, exactly |
-| React props | `props Card{title,onClose}` | the item, exactly |
+| React props | `props Card{title,onClose}` | the new item; it covers each change to the props of `Card` |
 
 ## Finding
 
