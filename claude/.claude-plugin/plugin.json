@@ -1,5 +1,5 @@
 {
   "name": "minimal-agent-kit",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Minimal workflow, wiki memory, blackboard, and destructive-command guard."
 }

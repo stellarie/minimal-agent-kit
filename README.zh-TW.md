@@ -67,6 +67,8 @@ Codex 需要複製檔案，並在 `~/.codex/config.toml` 中新增掛鉤。請�
 | `workflow` | 技能 | 設計、實作、審查、收尾。每個階段都有編號子步驟和輸出範本。 |
 | `wiki` | 技能 | 在 `docs/wiki/` 中保存長期專案記憶，頁面格式固定。 |
 | `ste` | 技能 | 聊天和檔案的 STE 寫作規則。 |
+| `verify/` | 腳本 | 檢查計畫檔，依計畫檢查變更的 Python 和 JS 程式碼，並執行專案自己的檢查工具。 |
+| `tools/sandbox.py` | 腳本 | 一次性建立可重複使用的試驗沙盒（pytest、jest、Express、React），附故障模擬。 |
 | `SessionStart` | 掛鉤 | 載入規則和 `docs/wiki/index.md`。 |
 | `PreToolUse` | 掛鉤 | 對每次 `Bash` 和 `PowerShell` 呼叫執行 guard。 |
 | `PostToolUse` | 掛鉤 | 對代理寫出的每個 Markdown 檔案執行 STE 檢查。 |

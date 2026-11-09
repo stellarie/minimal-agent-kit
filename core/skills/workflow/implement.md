@@ -30,7 +30,9 @@ Do these steps for each slice, in plan order:
 4. **Green.** Replace the pseudocode lines this test needs, one line at a time, with the smallest code that passes (`calculus.md` `reduction`). Follow the project standards from the scan.
 5. **Run.** Run the slice tests, then the affected suite. All pass.
 6. **Discharge.** For each claim of the slice, check the argument from the design against the real code. Update each `file:line`. If the argument fails, stop (2.4).
-   Run `calculus.md` `pure-slice`, `signature`, `reduction`, and the code steps of `termination`.
+   - Run `calculus.md` `pure-slice`, `signature`, `reduction`, and the code steps of `termination`.
+   - Fill the `done` locations in the plan file. Run `ast_checks.py <plan> --base <base>`.
+   - Fix each fail before you commit.
 7. **Refactor.** Reduce to normal form (`calculus.md` `normal-form`). Do not refactor code outside the slice.
 8. **Clean.** Remove debug output, commented code, unused imports, and comments that say what. Use the linter if the project has one. Update docs your change made false.
 9. **Commit.** One commit per slice, in the project's commit format.
@@ -79,6 +81,7 @@ Phase 2/4: Implement - slice <n>/<total> done
 Scenarios: <ids> - pass
 Claims: <ID: proved | tested | assumed>
 Calculus: pure-slice <pass | fail>, signature <pass | fail>, reduction <pass | fail>, normal-form <pass | fail>, termination <pass | fail>
+AST checks: <n> finding(s), <n> fail
 Files: <paths> (+<added> -<removed> lines)
 Commit: <sha> <message>
 Notes: <deviations from the plan, or "none">

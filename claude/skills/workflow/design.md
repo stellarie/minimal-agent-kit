@@ -83,8 +83,24 @@ Read `proof.md`. Check the plan before any code exists.
 7. For a small slice, use the small-slice rule in `proof.md`.
 8. Set the required strength of each claim with `calculus.md` `lazy` step 2.
 9. Fill the calculus checks table (`calculus.md` Output). For steps that need code, record what you planned (`calculus.md`).
+10. Write the plan file next to the design file (`$VERIFY/plan.schema.md`). Run `verify_plan.py <plan> --phase 1`.
+    Fix each fail, or list it for the human to accept by ID.
 
-## 1.8 Present
+## 1.8 Spike
+
+Test each assumed row and each risky K row before the human approves. Skip this step when no row needs it (`lazy`).
+
+1. Use the spike sandbox. If it does not exist, ask the human, then run `tools/sandbox.py <dest>` once.
+2. In the sandbox, make a branch `spike/<task>` from a clean `main`.
+3. Write the slice under test from its pseudocode and contract. Do not copy project source.
+4. Mock each dependency. Give each mock the ID of its assumed row.
+5. Run each mock through the fault cases and the boundary inputs in `faults.py` or `faults.js`.
+6. If a contract test needs a real dependency, install it from the target project's own manifest and lockfile, on the spike branch only. Use the exact locked version.
+7. Record each row: test name, pass or fail. A pass moves the row to `tested`. A fail refutes the row: change the slices.
+
+Spike code never enters the project. Phase 2 starts again from the pseudocode.
+
+## 1.9 Present
 
 Write the design file in a gitignored directory. Show the human this structure, then stop:
 
@@ -129,6 +145,13 @@ Blast radius: <callers and consumers>
 
 ## Calculus checks
 <table from calculus.md Output>
+
+## Plan check
+<plan file path> - verify_plan.py exit <0 | 1>, <n> finding(s), <n> blocking
+
+## Spike
+| Row | Test | Result |
+|---|---|---|
 
 ## Assumed
 - <claim or link ID>: <statement> - source <source> - risk if false <effect>

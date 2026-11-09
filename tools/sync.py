@@ -12,8 +12,8 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CORE = ROOT / "core"
 MAP = {
-    "claude": {"rules.md": "rules.md", "skills": "skills", "guard": "guard", "ste": "ste"},
-    "codex": {"rules.md": "AGENTS.md", "skills": "skills", "guard": "guard", "ste": "ste"},
+    "claude": {"rules.md": "rules.md", "skills": "skills", "guard": "guard", "ste": "ste", "verify": "verify"},
+    "codex": {"rules.md": "AGENTS.md", "skills": "skills", "guard": "guard", "ste": "ste", "verify": "verify"},
 }
 
 

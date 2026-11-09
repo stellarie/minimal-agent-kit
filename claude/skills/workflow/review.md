@@ -14,6 +14,7 @@ Give the subagent only these inputs:
 - the diff, or the base and head commits
 - the design file and its scenarios
 - this file, `proof.md`, `slicing.md`, and `calculus.md`
+- the plan file, and the output of the scripts in 3.4 step 6
 
 Do not give it your conclusions. A fresh reader does not share your assumptions.
 
@@ -73,6 +74,13 @@ Exercise the real flow, not only the tests:
 3. Check that each scenario has a test, or a named manual check.
 4. For a bug fix, undo the fix. Confirm the regression test fails. Restore the fix.
 5. Check for merge conflicts without a merge: `git merge-tree --write-tree HEAD origin/<main>`.
+6. Run the scripts, then the plan check with their findings:
+   ```
+   python $VERIFY/ast_checks.py <plan> --base <base> --phase 3 > ast.json
+   python $VERIFY/check_tools.py --base <base> > tools.json
+   python $VERIFY/verify_plan.py <plan> --phase 3 --findings ast.json tools.json
+   ```
+   The exit code of `verify_plan.py` is the gate. Report each "consider" line as a note to the human.
 
 ## 3.5 Fix
 
@@ -96,6 +104,8 @@ Phase 3/4: Review - done
 | CI checks | pass / fail / not run | <command> |
 | Merge conflicts | none / found / not run | <command> |
 | Regression proof | pass / not applicable | <test name> |
+| Plan check | pass / fail | verify_plan.py: <n> blocking |
+| Project tools | pass / fail / not run | <tool: result>; consider: <tools> |
 
 ## Reviews
 Code: <findings fixed, or "clean">

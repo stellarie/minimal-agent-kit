@@ -30,6 +30,19 @@ Guiding question for every phase: what is the minimal amount of code and impact 
 - `proof.md`: claims, strength, proof techniques, and the obligation table.
 - `calculus.md`: nine checks with steps and pass conditions: purity, signatures, one concern, pseudocode reduction, normal form, confluence, eta, termination, laziness.
 - `bdd.md`: scenario format.
+- `$VERIFY/plan.schema.md`: the plan file in JSON, and the finding format.
+
+## Scripts
+
+`$VERIFY` is the `verify/` directory of the kit install: `${CLAUDE_PLUGIN_ROOT}/verify` on Claude Code, `~/.codex/kit/verify` on Codex.
+
+| Script | Checks |
+|---|---|
+| `verify_plan.py PLAN --phase N` | Plan structure. Merges the other findings. Its exit code is a gate. |
+| `ast_checks.py PLAN --base REV` | Changed Python and JS code against the plan: files, `eta`, effects, `done` lines, public interface |
+| `check_tools.py --base REV` | The check tools the project has configured. A missing tool is a note, not a fail. |
+
+The spike sandbox comes from `tools/sandbox.py` in the kit checkout. Its `README.md` gives the spike steps.
 - `diagram.md`: diagram style.
 - `blackboard.md`: task file for subagents.
 

@@ -58,7 +58,7 @@ Copy the guard, then add the hook. Back up `~/.codex/config.toml` first.
 
 ```bash
 mkdir -p ~/.codex/kit
-cp -r codex/guard codex/ste ~/.codex/kit/
+cp -r codex/guard codex/ste codex/verify ~/.codex/kit/
 cp ~/.codex/config.toml ~/.codex/config.toml.bak
 ```
 
@@ -124,6 +124,17 @@ grep -qx '.kit/' .gitignore 2>/dev/null || echo '.kit/' >> .gitignore
 ```
 
 Then use the `wiki` skill to create `standards.md`, `architecture.md`, and `libraries.md`.
+
+## 5b. Set up the spike sandbox (optional, once)
+
+Ask the human first. It needs Node 22 or later and network access. Ask the human for the destination, outside every project:
+
+```bash
+"$PY" tools/sandbox.py <dest>
+```
+
+The command makes a git repo at `<dest>`, installs pytest and the jest packages, and runs the seed tests. Expect `sandbox ready: <dest>`.
+It refuses a destination that is not empty. Reuse the sandbox for each task.
 
 ## 6. Report
 

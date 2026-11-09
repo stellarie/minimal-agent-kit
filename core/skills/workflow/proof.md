@@ -19,6 +19,9 @@ Make the claim cover all inputs that the slice accepts, not one example.
 Rules:
 
 - Use the strongest strength you can show. Do not claim more.
+- A machine check (a type checker or a solver) that covers every input counts as `proved`.
+- `tested` needs a repeatable test. Fix the seed of each random input. A spike test in the sandbox counts.
+- `assumed` rows block the gate until the human accepts them by ID. `verify_plan.py` checks this.
 - A claim about all inputs needs `proved`, or `tested` with each input class covered.
 - Each `assumed` row is a risk. List it at the approval gate. The human accepts it by ID.
 - Small slice: a slice planned at less than about 20 lines, with no invariant, needs only its Post at `tested`. Its K link gives its Pre.
