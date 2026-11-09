@@ -1,6 +1,6 @@
 # Phase 2: Implement
 
-Goal: every scenario has a passing test, with the minimal code and impact.
+Goal: every slice meets its contract. Every claim has its evidence. Every scenario has a passing test. Use the minimal code and impact.
 
 ## Principle
 
@@ -25,14 +25,16 @@ Before each edit, ask:
 Do these steps for each slice, in plan order:
 
 1. **Re-scan.** Read the files the slice touches, and their tests. Look again for code to reuse.
-2. **Red.** Write the test for one scenario. Name it from the scenario. Run it. It must fail for the right reason.
-3. **Green.** Write the smallest code that passes. Follow the project standards from the scan.
-4. **Run.** Run the slice tests, then the affected suite. All pass.
-5. **Refactor.** Remove duplication you made. Do not refactor code outside the slice.
-6. **Clean.** Remove debug output, dead code, and comments that say what. Update docs your change made false.
-7. **Commit.** One commit per slice, in the project's commit format.
+2. **Check Pre.** Confirm the Pre of the slice holds. Use the Posts of earlier slices, not their internals.
+3. **Red.** Write the test for one scenario or claim. Name it from the scenario or claim ID. Run it. It must fail for the right reason.
+4. **Green.** Write the smallest code that passes. Follow the project standards from the scan.
+5. **Run.** Run the slice tests, then the affected suite. All pass.
+6. **Discharge.** For each claim of the slice, check the argument from the design against the real code. Update each `file:line`. If the argument fails, stop (2.4).
+7. **Refactor.** Remove duplication you made. Do not refactor code outside the slice.
+8. **Clean.** Remove debug output, dead code, and comments that say what. Update docs your change made false.
+9. **Commit.** One commit per slice, in the project's commit format.
 
-Repeat 2 to 4 for each scenario in the slice.
+Repeat 3 to 5 for each scenario and claim in the slice.
 
 ## 2.3 Harness use
 
@@ -54,8 +56,10 @@ Stop when one of these occurs:
 - A scenario cannot pass without a change outside the plan.
 - The diff grows past the plan, for example "and while I was there".
 - Three fixes for one failure do not work.
+- A claim argument fails against the real code.
 
 Then report: what you found, the evidence, and two options. Wait for the human.
+If the slice contract holds, redo only that slice. If the contract must change, go back to Phase 1 for that slice and each slice that depends on it.
 
 ## 2.5 Output
 
@@ -64,6 +68,7 @@ After each slice:
 ```
 Phase 2/4: Implement - slice <n>/<total> done
 Scenarios: <ids> - pass
+Claims: <ID: proved | tested | assumed>
 Files: <paths> (+<added> -<removed> lines)
 Commit: <sha> <message>
 Notes: <deviations from the plan, or "none">

@@ -1,6 +1,6 @@
 # Phase 1: Design
 
-Goal: an approved scope, a "not written" list, a diagram, and a plan.
+Goal: an approved scope, a "not written" list, slices with contracts, a diagram, and a plan proved on paper.
 
 ## 1.1 Recall
 
@@ -47,22 +47,36 @@ Answer the guiding question in writing. For each part of the solution, ask in th
 
 Impact counts as cost too. Prefer the change that touches fewer files, callers, and public interfaces.
 
-## 1.5 Architect
+## 1.5 Slice
+
+Read `slicing.md`. Slice the work before you design the parts.
+
+1. Write the Goal as a statement from the acceptance items.
+2. Cut the work into self-contained slices. Write Pre, Post, and Invariant for each slice.
+3. Write BDD scenarios (`bdd.md`) for each slice. One scenario per acceptance item. Include unhappy paths.
+4. Order the slices: dependencies first, then the riskiest.
+5. Mark slices that can run in parallel. Two parallel slices never touch the same file.
+6. Write the composition table: from the current system, through each slice, to the Goal.
+
+## 1.6 Architect
 
 1. Write a Graphviz file in the style from `diagram.md`.
-2. Show components, data flow, and the boundary of the change.
+2. Show components, data flow, and the boundary of the change. Show the slice for each part.
 3. Mark new parts, changed parts, and reused parts. Use a legend.
 4. Render it to PNG. Check the PNG for overlap before you present it.
 
-## 1.6 Plan
+## 1.7 Prove on paper
 
-1. Write BDD scenarios (`bdd.md`). One scenario per acceptance item. Include unhappy paths.
-2. Cut the work into slices. Each slice has its own scenarios and leaves the system working.
-3. Put the riskiest slice first.
-4. List failure modes. Map each one to a check or a named residual risk.
-5. Mark slices that can run in parallel. Two parallel slices never touch the same file.
+Read `proof.md`. Check the plan before any code exists.
 
-## 1.7 Present
+1. Write the claims for each slice. Each claim is true or false and covers all accepted inputs.
+2. For each claim, pick a technique: case analysis, induction, contradiction, or contract chaining.
+3. Write the argument against the current code and the planned change. Cite `file:line`.
+4. Give each claim and each composition link a strength: proved, tested, or assumed.
+5. List failure modes. Map each one to a claim, a check, or a named residual risk.
+6. If a claim or link has no argument, change the slices. Do not present a plan with a gap.
+
+## 1.8 Present
 
 Write the design file in a gitignored directory. Show the human this structure, then stop:
 
@@ -90,17 +104,29 @@ Blast radius: <callers and consumers>
 ## Architecture
 <path to PNG>
 
-## Scenarios
-<BDD scenarios>
+## Goal
+<statement>
 
 ## Slices
-1. <slice> - scenarios <ids> - files <paths> - risk <high | medium | low>
+<slice template from slicing.md: contract, files, scenarios, claims>
+
+## Composition
+<composition table from slicing.md>
+
+## Scenarios
+<BDD scenarios, grouped by slice>
+
+## Proof obligations
+<obligation table from proof.md>
+
+## Assumed
+- <claim ID>: <statement> - source <source> - risk if false <effect>
 
 ## Failure modes
-| Failure | Check or residual |
+| Failure | Claim, check, or residual |
 |---|---|
 
-Approve, or tell me what to change.
+Approve, and accept each assumed row by ID, or tell me what to change.
 ```
 
 Gate: wait for approval. Apply each change the human asks for, then present again.

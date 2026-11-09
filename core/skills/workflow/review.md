@@ -17,6 +17,15 @@ Give the subagent only these inputs:
 
 Do not give it your conclusions. A fresh reader does not share your assumptions.
 
+The subagent reviews by refutation. For each claim and composition link in the obligation table (`proof.md`):
+
+1. Try to build a counterexample: an input, a state, or a call order that makes the claim false.
+2. Check each `file:line` in the argument against the diff.
+3. Check that the strength is honest. A `proved` row with a gap is `tested` at best.
+4. Report each row: holds, broken with the counterexample, or weaker than stated.
+
+A broken claim sends its slice back to Phase 2. A broken composition link sends the plan back to Phase 1.
+
 The subagent returns findings. You fix them, then send the new diff for one more review.
 If the harness cannot start a subagent, stop. Tell the human. Do not review the work yourself.
 
@@ -84,6 +93,10 @@ Phase 3/4: Review - done
 Code: <findings fixed, or "clean">
 Implementation: <deviations, or "matches design">
 Behaviour: <scenario: observed outcome>
+
+## Claims
+| ID | Strength | Refutation result |
+|---|---|---|
 
 ## Diff
 <n files, +added -removed lines>
