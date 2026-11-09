@@ -47,7 +47,7 @@ Answer the guiding question in writing. For each part of the solution, ask in th
 
 Impact counts as cost too. Prefer the change that touches fewer files, callers, and public interfaces.
 
-Then run `calculus.md` `lazy` (each part names its scenario or claim) and `eta` (no pass-through functions).
+Then run `calculus.md` `lazy` step 1: each planned part names its acceptance item.
 
 ## 1.5 Slice
 
@@ -57,7 +57,7 @@ Read `slicing.md`. Slice the work before you design the parts.
 2. Cut the work into self-contained slices. Write Pre, Post, and Invariant for each slice.
 3. Write the signature of each slice (`calculus.md` `signature`). Cut each slice until it has one concern (`one-concern`).
 4. List the effects of each slice and put them in its contract (`pure-slice`).
-5. Write pseudocode for each slice (`reduction`). Map each claim to its lines.
+5. Write pseudocode for each slice (`reduction`). Map each claim to its lines. Give each loop a measure (`termination`). Remove pass-through functions (`eta`).
 6. Write BDD scenarios (`bdd.md`) for each slice. One scenario per acceptance item. Include unhappy paths.
 7. Order the slices: dependencies first, then the riskiest.
 8. Mark slices that can run in parallel. Check them with `confluence`, not only by shared files.
@@ -81,8 +81,8 @@ Read `proof.md`. Check the plan before any code exists.
 5. List failure modes. Map each one to a claim, a check, or a named residual risk.
 6. If a claim or link has no argument and no source, change the slices. Do not present a plan with a gap.
 7. For a small slice, use the small-slice rule in `proof.md`.
-8. Give full arguments only to claims that a link or the Goal uses (`calculus.md` `lazy`).
-9. Fill the calculus checks table (`calculus.md` Output) for `pure-slice`, `signature`, `one-concern`, `confluence`, `eta`, and `lazy`.
+8. Set the required strength of each claim with `calculus.md` `lazy` step 2.
+9. Fill the calculus checks table (`calculus.md` Output). In Phase 1, record what you planned, not pass or fail.
 
 ## 1.8 Present
 
@@ -116,16 +116,13 @@ Blast radius: <callers and consumers>
 <statement>
 
 ## Slices
-<slice template from slicing.md: contract, files, scenarios, claims>
+<slice template from slicing.md: signature, concern, effects, contract, files, scenarios, claims, pseudocode>
 
 ## Composition
 <composition table from slicing.md>
 
 ## Scenarios
 <BDD scenarios, grouped by slice>
-
-## Pseudocode
-<pseudocode for each slice, from calculus.md `reduction`>
 
 ## Proof obligations
 <obligation table from proof.md>

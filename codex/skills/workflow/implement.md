@@ -27,15 +27,15 @@ Do these steps for each slice, in plan order:
 1. **Re-scan.** Read the files the slice touches, and their tests. Look again for code to reuse.
 2. **Check Pre.** Confirm the Pre of the slice holds. Use the current system and the Posts of earlier slices, not their internals.
 3. **Red.** Write the test for one scenario or claim. Name it from the scenario or claim ID. Run it. It must fail for the right reason.
-4. **Green.** Replace one pseudocode line with the smallest code that passes (`calculus.md` `reduction`). Follow the project standards from the scan.
+4. **Green.** Replace the pseudocode lines this test needs, one line at a time, with the smallest code that passes (`calculus.md` `reduction`). Follow the project standards from the scan.
 5. **Run.** Run the slice tests, then the affected suite. All pass.
 6. **Discharge.** For each claim of the slice, check the argument from the design against the real code. Update each `file:line`. If the argument fails, stop (2.4).
-   Run `calculus.md` `pure-slice` (effects in contract), `signature` (real signature matches plan), and `reduction` (code and pseudocode map both ways).
+   Run `calculus.md` `pure-slice`, `signature`, `reduction`, and the code steps of `termination`.
 7. **Refactor.** Reduce to normal form (`calculus.md` `normal-form`). Do not refactor code outside the slice.
-8. **Clean.** Remove debug output, dead code, and comments that say what. Update docs your change made false.
+8. **Clean.** Remove debug output, commented code, unused imports, and comments that say what. Use the linter if the project has one. Update docs your change made false.
 9. **Commit.** One commit per slice, in the project's commit format.
 
-Repeat 3 to 5 for each scenario and claim in the slice.
+Repeat 3 to 5 for each scenario and claim in the slice. Record the failing-test count each round (`termination`).
 
 ## 2.3 Harness use
 
@@ -47,6 +47,8 @@ Repeat 3 to 5 for each scenario and claim in the slice.
 - **Subagents.** Use them only for independent slices. Give each one:
   - its work item and the task file path
   - the scenarios, files, and standards it needs
+  - the slice block: signature, contract, claims, and pseudocode
+  - the rule: report done pseudocode lines with their `file:line` in the Thread; the parent updates the design file
   - the rule: claim the item, touch only its files, report in the Thread
 - **Review subagent work.** Read the diff. A report is a claim. The diff is the truth.
 
@@ -56,7 +58,8 @@ Stop when one of these occurs:
 
 - A scenario cannot pass without a change outside the plan.
 - The diff grows past the plan, for example "and while I was there".
-- The failing-test count does not decrease in two rounds, or three fixes for one failure do not work (`calculus.md` `termination`).
+- The failing-test count does not decrease for three consecutive rounds (`calculus.md` `termination`).
+- A new pseudocode line adds an effect, a signature field, or a call to a public interface (`reduction`).
 - A claim argument fails against the real code.
 - A small slice grows past about 20 lines (`proof.md`).
 

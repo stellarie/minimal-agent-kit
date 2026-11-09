@@ -1,20 +1,25 @@
 # Calculus checks
 
-Nine checks from the lambda calculus. Each check has steps and a pass condition.
+Nine checks, with names from the lambda calculus. Each check has steps and a pass condition.
+
 A check passes only on evidence: a search result, a command result, or a `file:line`. A belief is not evidence.
 Record each result in the design file or the phase output. Write "fail" with the evidence when a check fails.
 
-| Check | Phase step |
+In Phase 1, no code exists. Record what you planned, for example "effects listed: 2". Give pass or fail only in Phase 2 and Phase 3.
+
+| Check | Run at |
 |---|---|
-| pure-slice | 1.5, 2.2 Discharge, 3.2 |
-| signature | 1.5, 1.7 |
-| one-concern | 1.5 |
-| reduction | 1.5 pseudocode, 2.2 Discharge |
-| normal-form | 2.2 Refactor, 3.1 |
-| confluence | 1.5 parallel marks, 3.4 |
-| eta | 1.4 Subtract, 3.1 |
-| termination | 2.4, 3.5 |
-| lazy | 1.4 Subtract, 1.7 |
+| pure-slice | 1.5 step 4 (plan), 2.2 Discharge, 3 |
+| signature | 1.5 step 3 (plan), 1.5 step 9, 2.2 Discharge, 3 |
+| one-concern | 1.5 step 3, 3 |
+| reduction | 1.5 step 5 (plan), 2.2 Green, 2.2 Discharge, 3 |
+| normal-form | 2.2 Refactor, 3 |
+| confluence | 1.5 step 8, 3 |
+| eta | 1.5 step 5 (plan), 3 |
+| termination | 1.5 step 5 (code loops), 2.2 Red and Green, 2.4, 3 |
+| lazy | 1.4 (acceptance items), 1.7 step 8, 3 |
+
+"3" means the review subagent runs the check again on the final diff. It does not copy results from the design file.
 
 ## pure-slice
 
@@ -22,12 +27,13 @@ A slice is a function from the state in its Pre to the state in its Post. Everyt
 
 Steps:
 
-1. List the effects of the slice: files written, network calls, environment reads, global state, database writes, processes started.
+1. List the effects of the slice. Include files written or deleted, network calls, environment reads, global state, database writes, processes started, logs and stdout, and clock or random reads.
 2. Put each effect in the contract: a read goes in Pre, a write goes in Post.
-3. After the code exists, search the diff for effects: `open(`, `write`, `fetch`, `requests.`, `os.environ`, `subprocess`, `global`, and the project's equivalents.
-4. Compare the search result with the list from step 1.
+3. After the code exists, search the diff for effects. Use the project's I/O calls, for example `open(`, `.write(`, `unlink`, `fetch`, `requests.`, `os.environ`, `subprocess`, `print(`, `logging.`, `time.`, `random.`, `global`.
+4. List each call from the diff into existing code. Check the effects of each callee, one level down.
+5. Compare the results of steps 3 and 4 with the list from step 1.
 
-Pass: each effect in the diff is in the contract. An effect not in the contract fails the check.
+Pass: each effect found in steps 3 and 4 is in the contract. The search is a lower bound. A miss found later fails the check.
 
 ## signature
 
@@ -44,26 +50,26 @@ Pass: each input field has a source, and each real signature matches its plan. A
 
 ## one-concern
 
-A slice with many inputs has many reasons to fail. Cut it until each slice has one concern.
+A slice with one concern has one reason to fail.
 
 Steps:
 
-1. Count the input fields in the signature of each slice.
-2. Find each slice with more than three input fields. Ask: can a smaller slice take part of the input first? Can the rest use its result?
-3. If yes, cut the slice. Write the new signatures.
-4. Write one sentence for the concern of each slice. If the sentence needs "and", cut again.
+1. Write the Post of each slice as one statement.
+2. If the Post needs two statements that do not depend on each other, cut the slice in two.
+3. For each slice with more than three input fields, check each field: is it needed to compute the Post? Remove each field that is not.
+4. Write the new signatures.
 
-Pass: each slice has a concern sentence without "and", or the design file says why the inputs cannot be split.
+Pass: each slice has one Post statement. A slice can keep two only for a cited dependency. Cite it with `file:line`: the step that computes field Y reads field X.
 
 ## reduction
 
-The plan gives pseudocode for each slice. Implementation then replaces each line of pseudocode with real code, one step at a time. Each step keeps the meaning.
+The plan gives pseudocode for each slice. Implementation then replaces the pseudocode with real code, one line at a time. Each step keeps the meaning.
 
 Steps in Phase 1:
 
-1. Write pseudocode for each slice. Use the names from the signature. Keep it at the level of calls and branches, not syntax.
+1. Write pseudocode for each slice in its slice block (`slicing.md` template). Use the names from the signature. Keep it at the level of calls and branches, not syntax.
 2. Mark each line that reuses existing code with its `file:line`.
-3. Check the pseudocode against the claims: each claim maps to the lines that make it true.
+3. Map each claim to the lines that make it true.
 
 ```
 S2: {config, rows} -> {report}
@@ -75,12 +81,14 @@ S2: {config, rows} -> {report}
 
 Steps in Phase 2:
 
-1. Replace one line of pseudocode with code.
-2. Run the tests of the slice.
-3. Mark the line done in the design file.
-4. Does the code need a line that the pseudocode does not have? Add it to the pseudocode first. Report it in the slice output.
+1. Take the pseudocode lines that the current scenario or claim needs.
+2. Replace them with code one line at a time. Run the tests of the slice after each line.
+3. Annotate each done line with its code `file:line`, for example `# done: report.py:55`.
+4. Does the code need a line that the pseudocode does not have? Add it to the pseudocode first.
+   - A new line that adds an effect, a signature field, or a call to a public interface: stop (2.4).
+   - Any other new line: report it in Notes in the slice output.
 
-Pass: each pseudocode line maps to code, and each code path maps to a pseudocode line. A code path without a pseudocode line fails the check.
+Pass: each pseudocode line has a `done:` location, and each code path in the diff maps to a pseudocode line. A code path without a line fails the check.
 
 ## normal-form
 
@@ -88,48 +96,53 @@ A change is done when nothing in it can reduce further.
 
 Steps:
 
-1. For each new function: does a caller pass its arguments through unchanged (eta)? Inline it.
+1. For each new function: run `eta`.
 2. For each new branch: can a test reach it? If not, remove it, or write the test.
-3. For each new variable used once: does it name a concept? If not, inline it.
-4. Search the diff for debug output, commented code, and unused imports. Use the linter if the project has one.
+3. For each new variable used once: does it name a concept from the design? If not, inline it.
 
-Pass: steps 1 to 4 find nothing, or each result has a one-line reason to stay.
+Pass: steps 1 to 3 find nothing. A result can stay only for a listed reason. Valid reasons: an `eta` reason, a test that reaches the branch, or a term from the design file.
+Debris (debug output, commented code, unused imports) is the Clean step in 2.2.
 
 ## confluence
 
-Two slices are independent when both orders give the same result. Shared files are only one way to break this.
+Two slices are independent when each one works without the other. Shared files are only one way to break this.
 
 Steps:
 
 1. For each pair of slices marked parallel, list what each one reads and writes: files, tables, keys, environment, ports.
-2. Pass the step only if no write of one slice is a read or a write of the other.
-3. In Phase 3, when the slices ran in parallel, run the full test suite on the merged result. Then apply the two commits in the other order on a scratch branch. Run the suite again.
+2. Check that no write of one slice is a read or a write of the other.
+3. In Phase 3, when the slices ran in parallel: apply each commit alone on the base. Run the full suite each time.
+4. Run the full suite on the merged result.
 
-Pass: step 2 finds no overlap, and the suite passes in both orders. On a fail, run the slices in sequence.
+Pass: step 2 finds no overlap, and the suite passes in steps 3 and 4. On a fail, run the slices in sequence. With more than two parallel slices, check each pair.
 
 ## eta
 
-A function that only passes its arguments to another function adds a name and no behaviour.
+A function whose body only calls one other function with its own parameters unchanged adds a name and no behaviour.
 
 Steps:
 
-1. In 1.4 Subtract, for each planned function, ask: does its body only call one other function with the same arguments?
-2. In 3.1, search the diff for new functions whose body is one call. Check if the call changes any argument.
+1. In the pseudocode, find each planned function whose body is one call with its own parameters.
+2. In the final diff, search for new functions whose body is one call. Check if the call changes any parameter.
 
 Pass: no new function is a pass-through. A pass-through can stay only for a reason in the design file. Valid reasons: a public interface, a test seam, or an extension point with a scenario.
 
 ## termination
 
-Each loop in the workflow needs a measure that decreases each round, and a bound.
+Each loop needs a measure that decreases, and a bound. This covers the workflow loops and the loops in the code.
 
-Steps:
+Steps for code:
 
-1. Name the loops: Red and Green per scenario, fix and test (2.4), review and fix (3.5).
-2. For each loop, record the measure each round: failing tests, open findings, or broken claims.
-3. After each round, compare the measure with the previous round.
-4. Stop when the measure does not decrease in two rounds, or after three rounds. Report to the human with the measure history.
+1. For each loop or recursion in the pseudocode, write its measure and its bound, for example `# measure: len(queue), decreases each pass`.
+2. In 2.2 Discharge, check the measure against the code.
 
-Pass: the measure reaches zero. Record the history, for example "findings: 13, 6, 1, 0".
+Steps for the workflow:
+
+1. The loops are: Red and Green per scenario, fix and test (2.4), and review and fix (3.5).
+2. Record the measure each round. Count failing tests, or open findings that you accept as real. Do not count findings you rejected in 3.5.
+3. Stop when the measure does not decrease for three consecutive rounds. Report to the human with the measure history.
+
+Pass: each code loop has a measure in the code, and each workflow loop reaches zero. Record the history, for example "findings: 13, 6, 1, 0".
 
 ## lazy
 
@@ -137,11 +150,11 @@ Do not build or prove what no claim needs.
 
 Steps:
 
-1. In 1.4 Subtract, for each planned part, name the scenario or claim that needs it. Remove each part with no name.
-2. In 1.7, for each proof, name the claim it supports. Give a full argument only to claims that a composition link or the Goal uses. Mark the others `tested`.
+1. In 1.4 Subtract, for each planned part, name the acceptance item that needs it. Remove each part with no name.
+2. In 1.7, give a full argument to each claim that a K row or the Kg row cites. A claim that only a scenario uses needs `tested`. The small-slice rule in `proof.md` still applies. This lowers the required strength. It does not forbid a stronger proof.
 3. Do not add an option, a parameter, or a hook for a future need. Write the future need in the design file as a non-goal.
 
-Pass: each planned part and each proof names its scenario or claim.
+Pass: each planned part names its acceptance item, and each claim has the strength its use requires.
 
 ## Output
 
