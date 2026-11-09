@@ -58,8 +58,9 @@ Stop when one of these occurs:
 
 - A scenario cannot pass without a change outside the plan.
 - The diff grows past the plan, for example "and while I was there".
-- The failing-test count does not decrease for three consecutive rounds (`calculus.md` `termination`).
-- A new pseudocode line adds an effect, a signature field, or a call to a public interface (`reduction`).
+- The failing-test count does not go below its lowest value for three consecutive rounds (`calculus.md` `termination`).
+- A new pseudocode line adds an effect or a signature field (`reduction`).
+- A new pseudocode line changes a public interface of this project, or calls code outside the Files of the slice.
 - A claim argument fails against the real code.
 - A small slice grows past about 20 lines (`proof.md`).
 
@@ -76,7 +77,7 @@ After each slice:
 Phase 2/4: Implement - slice <n>/<total> done
 Scenarios: <ids> - pass
 Claims: <ID: proved | tested | assumed>
-Calculus: pure-slice <pass | fail>, signature <pass | fail>, reduction <pass | fail>, normal-form <pass | fail>
+Calculus: pure-slice <pass | fail>, signature <pass | fail>, reduction <pass | fail>, normal-form <pass | fail>, termination <pass | fail>
 Files: <paths> (+<added> -<removed> lines)
 Commit: <sha> <message>
 Notes: <deviations from the plan, or "none">

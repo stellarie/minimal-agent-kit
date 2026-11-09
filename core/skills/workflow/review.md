@@ -28,7 +28,8 @@ A broken claim with its contract unchanged sends its slice back to Phase 2.
 A fix that changes a contract sends the slice and each slice that depends on it back to Phase 1. Check their K links again.
 A broken composition link sends the plan back to Phase 1.
 
-The subagent also runs each check in `calculus.md` again on the final diff. When slices ran in parallel, it runs `confluence` steps 3 and 4.
+The subagent also runs each check in `calculus.md` again on the final diff. For `termination`, it runs only the steps for code. When slices ran in parallel, it runs `confluence` steps 3 and 4.
+The parent, not the subagent, records the review-round history in 3.6.
 It reports each result with its evidence. It does not copy the results from the design file.
 
 The subagent returns findings. You fix them (3.5), then send the new diff for review again.

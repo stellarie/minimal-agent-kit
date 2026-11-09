@@ -11,7 +11,7 @@ Prove each slice once. Then prove that the slices compose to the goal.
 3. **Depend on contracts.** Slice n reads only the current system and the Posts of earlier slices. It never reads their internals.
 4. **Small claims.** One to three claims per slice. More claims means the slice is too big. Cut it again.
 5. **Order.** A slice comes after every slice whose Post it needs. Then put the riskiest slice first.
-6. **Parallel.** Two slices can run at the same time when neither depends on the other and `calculus.md` `confluence` step 2 holds.
+6. **Parallel.** Two slices can run at the same time when neither depends on the other and `calculus.md` `confluence` step 2 holds. Two slices that edit the same file never run in parallel.
 7. **Keep earlier Posts.** A slice keeps the Posts of earlier slices true, or names the Post it replaces.
 8. **Local repair.** When a slice claim breaks and its contract still holds, redo that slice in Phase 2. The other slices stay proved.
    If the contract must change, go back to Phase 1 for that slice and each slice that depends on it. Check their K links again.
@@ -47,7 +47,7 @@ Each link is one row in the composition table. A link with no justification is a
 Files: <paths>
 Scenarios: <ids>
 Signature: S1: {<field: type>} -> {<field: type>}
-Concern: <one sentence, no "and">
+Concern: <the one Post statement, or two with the cited dependency (`one-concern`)>
 Effects: <reads and writes, or "none">
 Pre: <statement>
 Post: <statement>

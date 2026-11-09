@@ -5,7 +5,9 @@ Nine checks, with names from the lambda calculus. Each check has steps and a pas
 A check passes only on evidence: a search result, a command result, or a `file:line`. A belief is not evidence.
 Record each result in the design file or the phase output. Write "fail" with the evidence when a check fails.
 
-In Phase 1, no code exists. Record what you planned, for example "effects listed: 2". Give pass or fail only in Phase 2 and Phase 3.
+In Phase 1, no code exists. For a step that needs code, record what you planned, for example "effects listed: 2". Give its pass or fail in Phase 2 and Phase 3.
+These steps need code: pure-slice 3 to 5, signature 4, reduction Phase 2, normal-form, eta 2, termination code step 2, and confluence 3 and 4.
+Give pass or fail in Phase 1 for the other steps: one-concern, lazy, signature 1 to 3, and confluence 1 and 2.
 
 | Check | Run at |
 |---|---|
@@ -59,7 +61,9 @@ Steps:
 3. For each slice with more than three input fields, check each field: is it needed to compute the Post? Remove each field that is not.
 4. Write the new signatures.
 
-Pass: each slice has one Post statement. A slice can keep two only for a cited dependency. Cite it with `file:line`: the step that computes field Y reads field X.
+Pass: each slice has one Post statement. A slice can keep two only for a cited dependency: the step that computes field Y reads field X.
+In Phase 1, cite the pseudocode line, for example "S2, line 3". In Phase 3, cite the code `file:line`.
+A write of a computed value is part of the Post that computes it.
 
 ## reduction
 
@@ -85,7 +89,8 @@ Steps in Phase 2:
 2. Replace them with code one line at a time. Run the tests of the slice after each line.
 3. Annotate each done line with its code `file:line`, for example `# done: report.py:55`.
 4. Does the code need a line that the pseudocode does not have? Add it to the pseudocode first.
-   - A new line that adds an effect, a signature field, or a call to a public interface: stop (2.4).
+   - A new line that adds an effect or a signature field: stop (2.4).
+   - A new line that changes a public interface of this project, or calls code outside the Files of the slice: stop (2.4).
    - Any other new line: report it in Notes in the slice output.
 
 Pass: each pseudocode line has a `done:` location, and each code path in the diff maps to a pseudocode line. A code path without a line fails the check.
@@ -109,9 +114,9 @@ Two slices are independent when each one works without the other. Shared files a
 
 Steps:
 
-1. For each pair of slices marked parallel, list what each one reads and writes: files, tables, keys, environment, ports.
-2. Check that no write of one slice is a read or a write of the other.
-3. In Phase 3, when the slices ran in parallel: apply each commit alone on the base. Run the full suite each time.
+1. For each pair of slices marked parallel, list what each one reads and writes: source files edited, files, tables, keys, environment, ports.
+2. Check that no write of one slice is a read or a write of the other. Two slices that edit the same source file overlap.
+3. In Phase 3, when the slices ran in parallel: apply each commit alone on the commit just before the parallel group. Run the full suite each time.
 4. Run the full suite on the merged result.
 
 Pass: step 2 finds no overlap, and the suite passes in steps 3 and 4. On a fail, run the slices in sequence. With more than two parallel slices, check each pair.
@@ -134,15 +139,15 @@ Each loop needs a measure that decreases, and a bound. This covers the workflow 
 Steps for code:
 
 1. For each loop or recursion in the pseudocode, write its measure and its bound, for example `# measure: len(queue), decreases each pass`.
-2. In 2.2 Discharge, check the measure against the code.
+2. In 2.2 Discharge, check the measure against the code. Record the `file:line` where the measure decreases, and the `file:line` of the bound or exit check.
 
 Steps for the workflow:
 
 1. The loops are: Red and Green per scenario, fix and test (2.4), and review and fix (3.5).
 2. Record the measure each round. Count failing tests, or open findings that you accept as real. Do not count findings you rejected in 3.5.
-3. Stop when the measure does not decrease for three consecutive rounds. Report to the human with the measure history.
+3. Stop when three consecutive rounds do not go below the lowest measure so far. Stop after ten rounds in any case. Report to the human with the measure history.
 
-Pass: each code loop has a measure in the code, and each workflow loop reaches zero. Record the history, for example "findings: 13, 6, 1, 0".
+Pass: each code loop has the two `file:line` locations from step 2, and each workflow loop reaches zero. Record the history, for example "findings: 13, 6, 1, 0".
 
 ## lazy
 
@@ -151,7 +156,7 @@ Do not build or prove what no claim needs.
 Steps:
 
 1. In 1.4 Subtract, for each planned part, name the acceptance item that needs it. Remove each part with no name.
-2. In 1.7, give a full argument to each claim that a K row or the Kg row cites. A claim that only a scenario uses needs `tested`. The small-slice rule in `proof.md` still applies. This lowers the required strength. It does not forbid a stronger proof.
+2. In 1.7, give a full argument to each claim that establishes a Post or Invariant that a K row or the Kg row uses. A claim that only a scenario uses needs `tested`. The small-slice rule in `proof.md` still applies. This lowers the required strength. It does not forbid a stronger proof.
 3. Do not add an option, a parameter, or a hook for a future need. Write the future need in the design file as a non-goal.
 
 Pass: each planned part names its acceptance item, and each claim has the strength its use requires.

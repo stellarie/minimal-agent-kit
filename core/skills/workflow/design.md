@@ -82,7 +82,7 @@ Read `proof.md`. Check the plan before any code exists.
 6. If a claim or link has no argument and no source, change the slices. Do not present a plan with a gap.
 7. For a small slice, use the small-slice rule in `proof.md`.
 8. Set the required strength of each claim with `calculus.md` `lazy` step 2.
-9. Fill the calculus checks table (`calculus.md` Output). In Phase 1, record what you planned, not pass or fail.
+9. Fill the calculus checks table (`calculus.md` Output). For steps that need code, record what you planned (`calculus.md`).
 
 ## 1.8 Present
 
