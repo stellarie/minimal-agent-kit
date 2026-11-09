@@ -101,9 +101,9 @@ Behaviour: <scenario: observed outcome>
 |---|---|---|
 
 ## New assumed rows
-- <claim or link ID>: <statement> - new or downgraded since design approval
+- <claim or link ID>: <statement> - new or downgraded since the last acceptance
 
-Accept each new assumed row by ID.
+Accept each new assumed row by ID. Do not list rows the human accepted in Phase 2.
 
 ## Diff
 <n files, +added -removed lines>
