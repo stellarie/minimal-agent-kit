@@ -162,6 +162,10 @@ def main(argv):
     parser.add_argument("files", nargs="*")
     args = parser.parse_args(argv)
     plan = verify_plan.load_json(args.plan)
+    schema = verify_plan.check_keys(plan, args.root)
+    if schema:
+        print(json.dumps(schema, indent=1))
+        return 1
     found = run(plan, args.root.resolve(), args.base, args.phase, args.files)
     print(json.dumps(found, indent=1))
     return 1 if any(f["level"] == "fail" for f in found) else 0

@@ -47,7 +47,11 @@ def check_keys(plan, root):
         return [finding("schema:top", "schema", "the plan must be a JSON object")]
     out = []
     queue = []
-    for key in ("parts", "composition", "slices", "acceptance", "accepted"):
+    for key in ("acceptance", "accepted"):
+        value = plan.get(key, [])
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            out.append(finding(f"schema:{key}", "schema", f"{key!r} must be a list of text"))
+    for key in ("parts", "composition", "slices"):
         if not isinstance(plan.get(key, []), list):
             out.append(finding(f"schema:{key}", "schema", f"{key!r} must be a list"))
         elif key in REQUIRED:
@@ -70,6 +74,13 @@ def check_keys(plan, root):
                 if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
                     out.append(finding(f"schema:{kind}[{n}].{key}", "schema", f"{key!r} must be a list of text"))
             if kind == "slices":
+                effects = item.get("effects", {})
+                ok = isinstance(effects, dict) and all(
+                    isinstance(effects.get(k, []), list) and all(isinstance(v, str) for v in effects.get(k, []))
+                    for k in ("reads", "writes")
+                )
+                if not ok:
+                    out.append(finding(f"schema:slices[{n}].effects", "schema", "'effects' must be an object with lists of text in 'reads' and 'writes'"))
                 for sub in ("claims", "inputs", "pseudocode"):
                     if isinstance(item.get(sub, []), list):
                         queue.append((sub, item.get(sub, [])))

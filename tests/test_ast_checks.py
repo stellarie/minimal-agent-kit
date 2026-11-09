@@ -134,6 +134,15 @@ class AstChecksTests(unittest.TestCase):
         self.plan["slices"][0]["interface"] = ["route GET /users/:id"]
         self.assertEqual({"interface:app.js:route GET /teams/:id"}, self.ids())
 
+    def test_main_stops_on_bad_plan(self):
+        plan = self.root / "plan.json"
+        plan.write_text(json.dumps({"slices": [{"id": "S1", "files": "src/a.py"}]}))
+        import contextlib, io
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = ast_checks.main([str(plan), "--base", "HEAD", "--root", str(self.root)])
+        self.assertEqual(1, code)
+        self.assertIn("schema:slices[0].files", out.getvalue())
+
     def test_pure_calls_are_not_effects(self):
         self.write("a.py", "import json\ndef keep(x):\n    items = [x]\n    items.remove(x)\n    return json.dumps(x)\n")
         fails = [f for f in ast_checks.run(self.plan, self.root, "HEAD", 1) if f["level"] == "fail"]
