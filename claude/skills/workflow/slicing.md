@@ -58,6 +58,6 @@ Claims: C1.1, C1.2
 |---|---|---|
 | K0 | Current system satisfies Pre(S1) | <file:line or test> |
 | K1 | Current system + Post(S1) satisfy Pre(S2) | <argument> |
-| Kinv | Each slice keeps every invariant and each earlier Post | <argument per slice> |
+| Kinv | Each slice keeps every invariant, and keeps each earlier Post or names the Post it replaces | <argument per slice> |
 | Kg | The Posts that still hold after Sn give the Goal | <argument> |
 ```
