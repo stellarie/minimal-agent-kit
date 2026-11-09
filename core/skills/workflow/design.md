@@ -47,7 +47,7 @@ Answer the guiding question in writing. For each part of the solution, ask in th
 
 Impact counts as cost too. Prefer the change that touches fewer files, callers, and public interfaces.
 
-Then run `calculus.md` L13 (each part names its scenario or claim) and L10 (no pass-through functions).
+Then run `calculus.md` `lazy` (each part names its scenario or claim) and `eta` (no pass-through functions).
 
 ## 1.5 Slice
 
@@ -55,13 +55,13 @@ Read `slicing.md`. Slice the work before you design the parts.
 
 1. Write the Goal as a statement from the acceptance items.
 2. Cut the work into self-contained slices. Write Pre, Post, and Invariant for each slice.
-3. Write the signature of each slice (`calculus.md` L4). Cut each slice until it has one concern (L5).
-4. List the effects of each slice and put them in its contract (L1).
-5. Write pseudocode for each slice (L6). Map each claim to its lines.
+3. Write the signature of each slice (`calculus.md` `signature`). Cut each slice until it has one concern (`one-concern`).
+4. List the effects of each slice and put them in its contract (`pure-slice`).
+5. Write pseudocode for each slice (`reduction`). Map each claim to its lines.
 6. Write BDD scenarios (`bdd.md`) for each slice. One scenario per acceptance item. Include unhappy paths.
 7. Order the slices: dependencies first, then the riskiest.
-8. Mark slices that can run in parallel. Check them with L8, not only by shared files.
-9. Write the composition table: from the current system, through each slice, to the Goal. Check each link with L4.
+8. Mark slices that can run in parallel. Check them with `confluence`, not only by shared files.
+9. Write the composition table: from the current system, through each slice, to the Goal. Check each link with `signature`.
 
 ## 1.6 Architect
 
@@ -81,8 +81,8 @@ Read `proof.md`. Check the plan before any code exists.
 5. List failure modes. Map each one to a claim, a check, or a named residual risk.
 6. If a claim or link has no argument and no source, change the slices. Do not present a plan with a gap.
 7. For a small slice, use the small-slice rule in `proof.md`.
-8. Give full arguments only to claims that a link or the Goal uses (`calculus.md` L13).
-9. Fill the calculus checks table (`calculus.md` Output) for L1, L4, L5, L8, L10, and L13.
+8. Give full arguments only to claims that a link or the Goal uses (`calculus.md` `lazy`).
+9. Fill the calculus checks table (`calculus.md` Output) for `pure-slice`, `signature`, `one-concern`, `confluence`, `eta`, and `lazy`.
 
 ## 1.8 Present
 
@@ -125,7 +125,7 @@ Blast radius: <callers and consumers>
 <BDD scenarios, grouped by slice>
 
 ## Pseudocode
-<pseudocode for each slice, from calculus.md L6>
+<pseudocode for each slice, from calculus.md `reduction`>
 
 ## Proof obligations
 <obligation table from proof.md>

@@ -28,10 +28,10 @@ A broken claim with its contract unchanged sends its slice back to Phase 2.
 A fix that changes a contract sends the slice and each slice that depends on it back to Phase 1. Check their K links again.
 A broken composition link sends the plan back to Phase 1.
 
-The subagent also runs `calculus.md` again on the final diff: L1, L4, L6, L7, and L10. When slices ran in parallel, it runs L8 step 3.
+The subagent also runs `calculus.md` again on the final diff: `pure-slice`, `signature`, `reduction`, `normal-form`, and `eta`. When slices ran in parallel, it runs `confluence` step 3.
 It reports each result with its evidence. It does not copy the results from the design file.
 
-The review and fix loop follows `calculus.md` L11. Record the finding count each round. Stop after three rounds, or when the count does not decrease in two rounds.
+The review and fix loop follows `calculus.md` `termination`. Record the finding count each round. Stop after three rounds, or when the count does not decrease in two rounds.
 
 The subagent returns findings. You fix them, then send the new diff for one more review.
 If the harness cannot start a subagent, stop. Tell the human. Do not review the work yourself.
@@ -106,7 +106,7 @@ Behaviour: <scenario: observed outcome>
 |---|---|---|
 
 ## Calculus checks
-| ID | Result | Evidence |
+| Check | Result | Evidence |
 |---|---|---|
 Review rounds: <finding count per round, for example 4, 1, 0>
 

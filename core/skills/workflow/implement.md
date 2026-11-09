@@ -27,11 +27,11 @@ Do these steps for each slice, in plan order:
 1. **Re-scan.** Read the files the slice touches, and their tests. Look again for code to reuse.
 2. **Check Pre.** Confirm the Pre of the slice holds. Use the current system and the Posts of earlier slices, not their internals.
 3. **Red.** Write the test for one scenario or claim. Name it from the scenario or claim ID. Run it. It must fail for the right reason.
-4. **Green.** Replace one pseudocode line with the smallest code that passes (`calculus.md` L6). Follow the project standards from the scan.
+4. **Green.** Replace one pseudocode line with the smallest code that passes (`calculus.md` `reduction`). Follow the project standards from the scan.
 5. **Run.** Run the slice tests, then the affected suite. All pass.
 6. **Discharge.** For each claim of the slice, check the argument from the design against the real code. Update each `file:line`. If the argument fails, stop (2.4).
-   Run `calculus.md` L1 (effects in contract), L4 (real signature matches plan), and L6 (code and pseudocode map both ways).
-7. **Refactor.** Reduce to normal form (`calculus.md` L7). Do not refactor code outside the slice.
+   Run `calculus.md` `pure-slice` (effects in contract), `signature` (real signature matches plan), and `reduction` (code and pseudocode map both ways).
+7. **Refactor.** Reduce to normal form (`calculus.md` `normal-form`). Do not refactor code outside the slice.
 8. **Clean.** Remove debug output, dead code, and comments that say what. Update docs your change made false.
 9. **Commit.** One commit per slice, in the project's commit format.
 
@@ -56,7 +56,7 @@ Stop when one of these occurs:
 
 - A scenario cannot pass without a change outside the plan.
 - The diff grows past the plan, for example "and while I was there".
-- The failing-test count does not decrease in two rounds, or three fixes for one failure do not work (`calculus.md` L11).
+- The failing-test count does not decrease in two rounds, or three fixes for one failure do not work (`calculus.md` `termination`).
 - A claim argument fails against the real code.
 - A small slice grows past about 20 lines (`proof.md`).
 
@@ -73,7 +73,7 @@ After each slice:
 Phase 2/4: Implement - slice <n>/<total> done
 Scenarios: <ids> - pass
 Claims: <ID: proved | tested | assumed>
-Calculus: L1 <pass | fail>, L4 <pass | fail>, L6 <pass | fail>, L7 <pass | fail>
+Calculus: pure-slice <pass | fail>, signature <pass | fail>, reduction <pass | fail>, normal-form <pass | fail>
 Files: <paths> (+<added> -<removed> lines)
 Commit: <sha> <message>
 Notes: <deviations from the plan, or "none">

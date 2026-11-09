@@ -4,19 +4,19 @@ Nine checks from the lambda calculus. Each check has steps and a pass condition.
 A check passes only on evidence: a search result, a command result, or a `file:line`. A belief is not evidence.
 Record each result in the design file or the phase output. Write "fail" with the evidence when a check fails.
 
-| ID | Check | Phase step |
-|---|---|---|
-| L1 | Pure slice | 1.5, 2.2 Discharge, 3.2 |
-| L4 | Signature | 1.5, 1.7 |
-| L5 | One concern | 1.5 |
-| L6 | Reduction | 1.5 pseudocode, 2.2 Discharge |
-| L7 | Normal form | 2.2 Refactor, 3.1 |
-| L8 | Confluence | 1.5 parallel marks, 3.4 |
-| L10 | Eta | 1.4 Subtract, 3.1 |
-| L11 | Termination | 2.4, 3.5 |
-| L13 | Lazy | 1.4 Subtract, 1.7 |
+| Check | Phase step |
+|---|---|
+| pure-slice | 1.5, 2.2 Discharge, 3.2 |
+| signature | 1.5, 1.7 |
+| one-concern | 1.5 |
+| reduction | 1.5 pseudocode, 2.2 Discharge |
+| normal-form | 2.2 Refactor, 3.1 |
+| confluence | 1.5 parallel marks, 3.4 |
+| eta | 1.4 Subtract, 3.1 |
+| termination | 2.4, 3.5 |
+| lazy | 1.4 Subtract, 1.7 |
 
-## L1 Pure slice
+## pure-slice
 
 A slice is a function from the state in its Pre to the state in its Post. Everything else it changes is a side effect.
 
@@ -29,7 +29,7 @@ Steps:
 
 Pass: each effect in the diff is in the contract. An effect not in the contract fails the check.
 
-## L4 Signature
+## signature
 
 Write each slice as a typed function: `S#: Pre -> Post`. Then you can check the composition like types.
 
@@ -42,7 +42,7 @@ Steps:
 
 Pass: each input field has a source, and each real signature matches its plan. A field with no source is a gap. Change the slices.
 
-## L5 One concern
+## one-concern
 
 A slice with many inputs has many reasons to fail. Cut it until each slice has one concern.
 
@@ -55,7 +55,7 @@ Steps:
 
 Pass: each slice has a concern sentence without "and", or the design file says why the inputs cannot be split.
 
-## L6 Reduction
+## reduction
 
 The plan gives pseudocode for each slice. Implementation then replaces each line of pseudocode with real code, one step at a time. Each step keeps the meaning.
 
@@ -82,20 +82,20 @@ Steps in Phase 2:
 
 Pass: each pseudocode line maps to code, and each code path maps to a pseudocode line. A code path without a pseudocode line fails the check.
 
-## L7 Normal form
+## normal-form
 
 A change is done when nothing in it can reduce further.
 
 Steps:
 
-1. For each new function: does a caller pass its arguments through unchanged (L10)? Inline it.
+1. For each new function: does a caller pass its arguments through unchanged (eta)? Inline it.
 2. For each new branch: can a test reach it? If not, remove it, or write the test.
 3. For each new variable used once: does it name a concept? If not, inline it.
 4. Search the diff for debug output, commented code, and unused imports. Use the linter if the project has one.
 
 Pass: steps 1 to 4 find nothing, or each result has a one-line reason to stay.
 
-## L8 Confluence
+## confluence
 
 Two slices are independent when both orders give the same result. Shared files are only one way to break this.
 
@@ -107,7 +107,7 @@ Steps:
 
 Pass: step 2 finds no overlap, and the suite passes in both orders. On a fail, run the slices in sequence.
 
-## L10 Eta
+## eta
 
 A function that only passes its arguments to another function adds a name and no behaviour.
 
@@ -118,7 +118,7 @@ Steps:
 
 Pass: no new function is a pass-through. A pass-through can stay only for a reason in the design file. Valid reasons: a public interface, a test seam, or an extension point with a scenario.
 
-## L11 Termination
+## termination
 
 Each loop in the workflow needs a measure that decreases each round, and a bound.
 
@@ -131,7 +131,7 @@ Steps:
 
 Pass: the measure reaches zero. Record the history, for example "findings: 13, 6, 1, 0".
 
-## L13 Lazy
+## lazy
 
 Do not build or prove what no claim needs.
 
@@ -149,8 +149,8 @@ Put this table in the design file, and update it in Phase 2 and Phase 3:
 
 ```
 ## Calculus checks
-| ID | Result | Evidence |
+| Check | Result | Evidence |
 |---|---|---|
-| L1 | pass | effects: writes out/report.json (Post S2); search: 1 hit, in contract |
-| L11 | pass | review findings: 4, 1, 0 |
+| pure-slice | pass | effects: writes out/report.json (Post S2); search: 1 hit, in contract |
+| termination | pass | review findings: 4, 1, 0 |
 ```
