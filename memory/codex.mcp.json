@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "agent-memory": {
+      "command": "node",
+      "args": ["./bin/mcp.mjs"],
+      "cwd": ".",
+      "env": { "AGENT_MEMORY_RUNTIME": "codex" }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "agent-memory",
+  "version": "0.1.0",
+  "description": "Agent memory with a forgetting curve: a small hot index in context, a searchable cold store on disk.",
+  "author": { "name": "stellarie" },
+  "license": "MIT",
+  "repository": "https://github.com/stellarie/minimal-agent-kit"
+}

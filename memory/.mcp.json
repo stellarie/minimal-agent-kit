@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "agent-memory": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/mcp.mjs"],
+      "env": { "AGENT_MEMORY_RUNTIME": "claude" }
+    }
+  }
+}

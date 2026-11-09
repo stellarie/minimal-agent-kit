@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="472" viewBox="0 0 860 472">
+<style>text{font-family:"Segoe UI","Microsoft YaHei","Microsoft JhengHei",sans-serif;fill:#3d2f4a;text-anchor:middle}.t{font-size:19px;font-weight:600}.d{font-size:14px}</style>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9" fill="none" stroke="#3d2f4a" stroke-width="1.6"/></marker></defs>
+<rect width="860" height="472" fill="#fff"/>
+<rect x="280" y="20" width="300" height="56" rx="16" fill="#8b6fd6" fill-opacity=".18" stroke="#8b6fd6" stroke-width="2"/><text x="430.0" y="48.0" class="t" dominant-baseline="central">Claude Code or Codex</text>
+<rect x="20" y="130" width="250" height="80" rx="16" fill="#e0679a" fill-opacity=".18" stroke="#e0679a" stroke-width="2"/><text x="145.0" y="158" class="t" dominant-baseline="central">Session start</text><text x="145.0" y="186" class="d" dominant-baseline="central">rules, wiki index, memory index</text>
+<rect x="290" y="130" width="280" height="80" rx="16" fill="#e0679a" fill-opacity=".18" stroke="#e0679a" stroke-width="2"/><text x="430.0" y="158" class="t" dominant-baseline="central">workflow skill</text><text x="430.0" y="186" class="d" dominant-baseline="central">design → implement → review → close</text>
+<rect x="590" y="130" width="250" height="80" rx="16" fill="#e0679a" fill-opacity=".18" stroke="#e0679a" stroke-width="2"/><text x="715.0" y="158" class="t" dominant-baseline="central">guard + STE hook</text><text x="715.0" y="186" class="d" dominant-baseline="central">denies destructive shell</text>
+<rect x="290" y="262" width="120" height="54" rx="16" fill="#8b6fd6" fill-opacity=".18" stroke="#8b6fd6" stroke-width="2"/><text x="350.0" y="289.0" class="t" dominant-baseline="central">you approve</text>
+<rect x="425" y="262" width="155" height="54" rx="16" fill="#e0679a" fill-opacity=".18" stroke="#e0679a" stroke-width="2"/><text x="502.5" y="289.0" class="t" dominant-baseline="central">review subagent</text>
+<rect x="20" y="372" width="250" height="80" rx="16" fill="#e8b84a" fill-opacity=".18" stroke="#e8b84a" stroke-width="2"/><text x="145.0" y="400" class="t" dominant-baseline="central">docs/wiki/</text><text x="145.0" y="428" class="d" dominant-baseline="central">per project, in git</text>
+<rect x="590" y="372" width="250" height="80" rx="16" fill="#e8b84a" fill-opacity=".18" stroke="#e8b84a" stroke-width="2"/><text x="715.0" y="400" class="t" dominant-baseline="central">~/.agent-memory</text><text x="715.0" y="428" class="d" dominant-baseline="central">per user, optional</text>
+<path d="M330 78 L170 128" stroke="#3d2f4a" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<path d="M430 78 L430 128" stroke="#3d2f4a" stroke-width="1.6" fill="none" marker-start="url(#a)" marker-end="url(#a)"/>
+<path d="M530 78 L690 128" stroke="#3d2f4a" stroke-width="1.6" fill="none" marker-end="url(#a)"/>
+<path d="M350 212 L350 260" stroke="#3d2f4a" stroke-width="1.6" fill="none" marker-start="url(#a)" marker-end="url(#a)"/>
+<path d="M502 212 L502 260" stroke="#3d2f4a" stroke-width="1.6" fill="none" marker-start="url(#a)" marker-end="url(#a)"/>
+<path d="M145 212 L145 370" stroke="#3d2f4a" stroke-width="1.6" fill="none" stroke-dasharray="6 5" marker-end="url(#a)"/>
+<path d="M300 212 L240 370" stroke="#3d2f4a" stroke-width="1.6" fill="none" stroke-dasharray="6 5" marker-start="url(#a)" marker-end="url(#a)"/>
+<path d="M566 212 L640 370" stroke="#3d2f4a" stroke-width="1.6" fill="none" stroke-dasharray="6 5" marker-start="url(#a)" marker-end="url(#a)"/>
+</svg>

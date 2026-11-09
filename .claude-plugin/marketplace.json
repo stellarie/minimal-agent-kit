@@ -1,0 +1,18 @@
+{
+  "name": "minimal-agent-kit",
+  "owner": {
+    "name": "stellarie"
+  },
+  "plugins": [
+    {
+      "name": "minimal-agent-kit",
+      "source": "./claude",
+      "description": "Minimal workflow, wiki memory, blackboard, and destructive-command guard."
+    },
+    {
+      "name": "agent-memory",
+      "source": "./memory",
+      "description": "Forgetting-curve memory: a small index in context, a searchable store on disk."
+    }
+  ]
+}

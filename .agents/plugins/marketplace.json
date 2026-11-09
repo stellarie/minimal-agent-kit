@@ -1,0 +1,19 @@
+{
+  "name": "minimal-agent-kit",
+  "interface": {
+    "displayName": "minimal-agent-kit"
+  },
+  "plugins": [
+    {
+      "name": "agent-memory",
+      "source": {
+        "source": "local",
+        "path": "./memory"
+      },
+      "policy": {
+        "installation": "AVAILABLE"
+      },
+      "category": "productivity"
+    }
+  ]
+}

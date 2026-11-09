@@ -1,0 +1,13 @@
+{
+  "deny_patterns": [
+    {"id": "mkfs", "re": "\\bmkfs(\\.\\w+)?\\b"},
+    {"id": "dd-device", "re": "\\bdd\\b[^\\n]*\\bof=/dev/"},
+    {"id": "fork-bomb", "re": ":\\(\\)\\s*\\{\\s*:\\|:&\\s*\\}\\s*;\\s*:"},
+    {"id": "windows-format", "re": "\\bformat(\\.com)?\\s+[a-z]:|\\b(format-volume|clear-disk|diskpart)\\b"},
+    {"id": "sql-drop", "re": "\\bdrop\\s+(database|schema)\\b"},
+    {"id": "chmod-root", "re": "\\bchmod\\s+-R\\s+\\S+\\s+/(\\s|$)"},
+    {"id": "dev-write", "re": ">\\s*/dev/(sd|nvme|hd)\\w*"}
+  ],
+  "protected_branches": ["main", "master"],
+  "dangerous_paths": ["/", "/*", "~", "~/", "~/*", "$HOME", "${HOME}", ".", "./", "./*", "..", "*", "/mnt/c", "c:\\", "c:/", "$env:userprofile"]
+}
