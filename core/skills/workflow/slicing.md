@@ -10,10 +10,11 @@ Prove each slice once. Then prove that the slices compose to the goal.
 2. **Contract first.** Write Pre, Post, and Invariant before you plan the code.
 3. **Depend on contracts.** Slice n reads only the Post of earlier slices. It never reads their internals.
 4. **Small claims.** One to three claims per slice. More claims means the slice is too big. Cut it again.
-5. **Order.** Put the riskiest slice first. A slice comes after every slice whose Post it needs.
+5. **Order.** A slice comes after every slice whose Post it needs. Then put the riskiest slice first.
 6. **Parallel.** Two slices with no dependency and no shared file can run at the same time.
-7. **Local repair.** When a slice claim breaks, redo that slice only. Its contract stays fixed, so the other slices stay proved.
-   If the contract must change, redo each slice that depends on it.
+7. **Keep earlier Posts.** A slice keeps the Posts of earlier slices true, or names the Post it replaces.
+8. **Local repair.** When a slice claim breaks and its contract still holds, redo that slice in Phase 2. The other slices stay proved.
+   If the contract must change, go back to Phase 1 for that slice and each slice that depends on it. Check their K links again.
 
 ## Contract terms
 
@@ -31,8 +32,8 @@ Write each term as a statement that is true or false. "Fast" is not a statement.
 The plan is correct when this chain holds:
 
 1. The current system satisfies the Pre of slice 1.
-2. For each n, the Post of slices 1 to n satisfies the Pre of slice n+1.
-3. Each slice keeps every invariant.
+2. For each n, the current system plus the Posts of slices 1 to n satisfy the Pre of slice n+1.
+3. Each slice keeps the invariants of all slices, and the Posts of earlier slices (rule 7).
 4. The Posts of all slices together give the Goal.
 
 Each link is one row in the composition table. A link with no justification is a gap in the plan.
@@ -56,6 +57,7 @@ Claims: C1.1, C1.2
 | Link | Statement | Justification |
 |---|---|---|
 | K0 | Current system satisfies Pre(S1) | <file:line or test> |
-| K1 | Post(S1) satisfies Pre(S2) | <argument> |
+| K1 | Current system + Post(S1) satisfy Pre(S2) | <argument> |
+| Ki | Each slice keeps every invariant and each earlier Post | <argument per slice> |
 | Kg | Post(S1) + ... + Post(Sn) give the Goal | <argument> |
 ```
