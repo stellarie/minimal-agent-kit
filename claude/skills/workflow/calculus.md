@@ -144,9 +144,9 @@ Steps for code:
 
 Steps for the workflow:
 
-1. The loops are: Red and Green per scenario, fix and test (2.4), and review and fix (3.5).
+1. The loops are: Red and Green per scenario (2.2), and review and fix (3.5). A test that fails during Green is part of its Red and Green instance.
 2. Record the measure each round. Count failing tests, or open findings that you accept as real. Do not count findings you rejected in 3.5.
-3. Scope the measure to one loop instance: one scenario's Red and Green, one failure in 2.4, or one review loop. A new instance starts with no history. A measure of 0 ends the instance.
+3. Scope the measure to one loop instance: one scenario's Red and Green, or one review loop. A new instance starts with no history. A measure of 0 ends the instance.
 4. Stop when three consecutive rounds of one instance do not go below its lowest measure so far. Stop after ten rounds of one instance in any case. Report to the human with the measure history.
 
 Pass: each code loop has the two `file:line` locations from step 2, and each workflow loop reaches zero. Record the history, for example "findings: 13, 6, 1, 0".
