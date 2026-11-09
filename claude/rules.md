@@ -9,7 +9,7 @@ Code not written is the best code. Reuse before you write.
 
 Use the `workflow` skill for any change that needs a plan. Phases:
 
-1. Design: scan, subtract, diagram, plan. Present. Wait for approval.
+1. Design: scan, subtract, slice, diagram, prove on paper. Present. Wait for approval.
 2. Implement: one scenario at a time. Test fails first, then passes.
 3. Review and test: run the completion gate.
 4. Close: present the result. Update the project wiki.

@@ -11,8 +11,8 @@ Guiding question for every phase: what is the minimal amount of code and impact 
 
 | Phase | Read first | Ends with |
 |---|---|---|
-| 1. Design | `design.md` | Human approves the design. |
-| 2. Implement | `implement.md` | Every scenario has a passing test. |
+| 1. Design | `design.md` | Human approves the slices, the proof obligations, and each assumed claim. |
+| 2. Implement | `implement.md` | Every slice meets its contract. Every scenario has a passing test. |
 | 3. Review | `review.md` | Four reviews pass. Human approves the result. |
 | 4. Close | `close.md` | Wiki and memory are current. |
 
@@ -26,6 +26,8 @@ Guiding question for every phase: what is the minimal amount of code and impact 
 
 ## Shared references
 
+- `slicing.md`: slices with contracts, and the composition table.
+- `proof.md`: claims, strength, proof techniques, and the obligation table.
 - `bdd.md`: scenario format.
 - `diagram.md`: diagram style.
 - `blackboard.md`: task file for subagents.
