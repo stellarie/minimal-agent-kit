@@ -88,15 +88,19 @@ def flatten(body, out):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             continue
         if isinstance(node, COMPOUND):
-            out.append({"start": node.lineno, "end": max(node.lineno, node.body[0].lineno - 1)})
+            out.append({"start": node.lineno, "end": max(node.lineno, first_line(node.body[0]) - 1)})
             for field in ("body", "orelse", "finalbody"):
                 flatten(getattr(node, field, []), out)
             for h in getattr(node, "handlers", []):
-                out.append({"start": h.lineno, "end": max(h.lineno, h.body[0].lineno - 1)})
+                out.append({"start": h.lineno, "end": max(h.lineno, first_line(h.body[0]) - 1)})
                 flatten(h.body, out)
             continue
-        start = min([node.lineno] + [d.lineno for d in getattr(node, "decorator_list", [])])
-        out.append({"start": start, "end": node.end_lineno})
+        out.append({"start": first_line(node), "end": node.end_lineno})
+
+
+def first_line(node):
+    """A decorated statement starts at its first decorator."""
+    return min([node.lineno] + [d.lineno for d in getattr(node, "decorator_list", [])])
 
 
 def facts(source):

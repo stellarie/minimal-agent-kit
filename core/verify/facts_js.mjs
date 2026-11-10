@@ -148,6 +148,7 @@ function facts(src) {
         // The header runs from the keyword to the line where the first child starts.
         statements.push({ start: s.loc.start.line, end: Math.max(s.loc.start.line, kids[0].loc.start.line) });
         if (s.handler) statements.push({ start: s.handler.loc.start.line, end: s.handler.body.loc.start.line });
+        if (s.type === "DoWhileStatement") statements.push({ start: s.body.loc.end.line, end: s.loc.end.line });
         kids.forEach((k) => flatten(k.type === "BlockStatement" ? k.body : [k]));
         continue;
       }

@@ -1,5 +1,6 @@
 """Tests for minimal_check.py: each changed hunk must be needed by a test (1-minimal)."""
 
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -181,6 +182,16 @@ class MinimalCheckTests(unittest.TestCase):
         found = minimal_check.run(self.root, self.base, TEST)
         self.assertEqual(["minimal:syntax"], [f["id"] for f in found])
         self.assertIn("by hand", found[0]["detail"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is not on PATH")
+    def test_js_syntax_breaking_undo_is_reported(self):
+        self.write("b.js", "exports.one = () => {\n  return 1;\n};\n")
+        self.commit("js")
+        self.base = self.rev()
+        self.write("b.js", "exports.one = () => {\n  if (true) {\n    return 1;\n  }\n};\n")
+        self.commit("wrap")
+        found = self.levels(self.run_check(lines=True))
+        self.assertEqual("not-run", found.get("minimal:syntax"))
 
     def test_mocha_test_folder_is_skipped(self):
         (self.root / "test").mkdir()

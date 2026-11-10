@@ -339,6 +339,23 @@ class AstChecksTests(unittest.TestCase):
         self.write("m.js", "if (a &&\n  c) {\n  f();\n}\ntry {\n  g();\n} catch ({ code }) {\n  h();\n}\n")
         self.assertEqual({"reduction:m.js:1", "reduction:m.js:7"}, self.ids(phase=2))
 
+    def test_decorator_in_compound_body_is_not_the_header(self):
+        self.write("a.py", "def keep(x):\n    return x + 1\n\n\nif True:\n    @staticmethod\n    def g():\n        return 1\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "deco")
+        self.write("a.py", "def keep(x):\n    return x + 1\n\n\nif True:\n    @(staticmethod)\n    def g():\n        return 1\n")
+        self.plan["slices"][0]["pseudocode"] = [{"line": 1, "text": "g", "done": "a.py:7"}]
+        self.assertEqual(set(), self.ids(phase=2))
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_js_do_while_condition_counts(self):
+        self.plan["slices"][0]["files"].append("m.js")
+        self.write("m.js", "let i = 0;\ndo {\n  i++;\n} while (i < 3);\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "do")
+        self.write("m.js", "let i = 0;\ndo {\n  i++;\n} while (i < 9);\n")
+        self.assertEqual({"reduction:m.js:4"}, self.ids(phase=2))
+
     def test_stdlib_name_in_ancestor_folder_is_not_a_depend(self):
         (self.root / "myapp" / "cmd").mkdir(parents=True)
         self.write("myapp/logging.py", "L = 1\n")

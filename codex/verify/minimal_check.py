@@ -176,8 +176,20 @@ class Strip(ast.NodeTransformer):
         return node
 
 
+def js_broken(source):
+    """True when the vendored acorn parser cannot read the source. False when node is missing."""
+    node = shutil.which("node")
+    if not node:
+        return False
+    r = subprocess.run([node, str(HERE / "facts_js.mjs")], input=source, capture_output=True,
+                       text=True, encoding="utf-8", errors="surrogateescape")
+    return '"error"' in r.stdout[:20]
+
+
 def same_behaviour(rel, before, after):
     """True when a Python file differs only in docstrings and annotations. None when `after` does not parse."""
+    if pathlib.PurePosixPath(rel).suffix in {".js", ".mjs", ".cjs", ".jsx"}:
+        return None if js_broken(after) else False
     if not rel.endswith(".py"):
         return False
     # Parse bytes so the BOM and any coding cookie are honoured.
