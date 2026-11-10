@@ -78,9 +78,11 @@ Exercise the real flow, not only the tests:
    ```
    python $VERIFY/ast_checks.py <plan> --base <base> --phase 3 > ast.json
    python $VERIFY/check_tools.py --base <base> > tools.json
-   python $VERIFY/verify_plan.py <plan> --phase 3 --findings ast.json tools.json
+   python $VERIFY/minimal_check.py --base <base> --test "<test command>" > minimal.json
+   python $VERIFY/verify_plan.py <plan> --phase 3 --findings ast.json tools.json minimal.json
    ```
-   The exit code of `verify_plan.py` is the gate. Report each "consider" line as a note to the human.
+   The exit code of `verify_plan.py` is the gate. Report each "consider" and "not-run" line as a note to the human.
+   A `minimal:` fail is a hunk the tests do not need. Remove it, add a test that needs it, or ask the human to accept its ID.
 
 ## 3.5 Fix
 

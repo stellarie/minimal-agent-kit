@@ -76,7 +76,7 @@ The command needs network access. It prints `sandbox ready: <empty-dir>`. Each t
 | `workflow` | skill | Design, implement, review, close. Each phase has numbered substeps and an output template. |
 | `wiki` | skill | Keeps long-term project memory in `docs/wiki/`, with a fixed page format. |
 | `ste` | skill | The STE writing rules for chat and files. |
-| `verify/` | scripts | Check the plan file and the changed Python and JS code against it, and run the project's own check tools. |
+| `verify/` | scripts | Check the plan file and the changed Python and JS code against it, run the project's own check tools, and prove each changed hunk is needed by a test. |
 | `tools/sandbox.py` | script | Sets up a reusable spike sandbox (pytest, jest, Express, React) with fault mocks, once. |
 | `SessionStart` | hook | Loads the rules and `docs/wiki/index.md`. |
 | `PreToolUse` | hook | Runs the guard on each `Bash` and `PowerShell` call. |

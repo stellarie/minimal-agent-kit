@@ -76,7 +76,7 @@ python tools/sandbox.py <empty-dir>
 | `workflow` | 技能 | 设计、实现、审查、收尾。每个阶段都有编号子步骤和输出模板。 |
 | `wiki` | 技能 | 在 `docs/wiki/` 中保存长期项目记忆，页面格式固定。 |
 | `ste` | 技能 | 聊天和文件的 STE 写作规则。 |
-| `verify/` | 脚本 | 检查计划文件，按计划检查改动的 Python 和 JS 代码，并运行项目自己的检查工具。 |
+| `verify/` | 脚本 | 检查计划文件，按计划检查改动的 Python 和 JS 代码，运行项目自己的检查工具，并证明每个改动块都被某个测试需要。 |
 | `tools/sandbox.py` | 脚本 | 一次性搭建可复用的试验沙盒（pytest、jest、Express、React），带故障模拟。 |
 | `SessionStart` | 钩子 | 加载规则和 `docs/wiki/index.md`。 |
 | `PreToolUse` | 钩子 | 对每次 `Bash` 和 `PowerShell` 调用运行 guard。 |

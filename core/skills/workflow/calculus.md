@@ -30,6 +30,7 @@ Scripts in `$VERIFY` (`SKILL.md`) run these steps. A script result is evidence. 
 | `verify_plan.py` | signature 1 to 3, lazy 1, confluence 1 and 2, the `done` part of reduction, the K row justifications |
 | `ast_checks.py` | pure-slice 3, signature 4 for public symbols, the code-path part of reduction, eta 2 |
 | `check_tools.py` | the project's linters, type checkers, coverage, and mutation tools |
+| `minimal_check.py` | lazy, on the code: each changed hunk is needed by a test (1-minimal) |
 
 The AST search is a lower bound. Dynamic calls and reflection can hide an effect from it.
 
