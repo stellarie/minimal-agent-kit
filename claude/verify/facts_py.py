@@ -1,7 +1,7 @@
 """Extract syntax facts from Python source on stdin. Print them as JSON.
 
 Facts: functions (name, start, end, passthrough), calls (name, line), interface (public symbols),
-imports (candidate module names, relative level, lines), classes (lines).
+imports (candidate module names, relative level, lines), classes (lines), statements (top-level lines).
 """
 
 import ast
@@ -69,6 +69,19 @@ def interface(tree):
     return sorted(v for k, v in out.items() if k in keep)
 
 
+def statements(tree):
+    """Top-level statements other than imports and the module docstring. Decorators count."""
+    out = []
+    for n, node in enumerate(tree.body):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            continue
+        if n == 0 and isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            continue
+        start = min([node.lineno] + [d.lineno for d in getattr(node, "decorator_list", [])])
+        out.append({"start": start, "end": node.end_lineno})
+    return out
+
+
 def facts(source):
     tree = ast.parse(source)
     functions, calls, imports, classes = [], [], [], []
@@ -87,9 +100,10 @@ def facts(source):
                 imports.append({"specs": [a.name], "level": 0, "start": node.lineno, "end": node.end_lineno})
         elif isinstance(node, ast.ImportFrom):
             mod = node.module or ""
-            specs = [f"{mod}.{a.name}" if mod else a.name for a in node.names] + ([mod] if mod else [])
+            specs = [f"{mod}.{a.name}" if mod else a.name for a in node.names] + [mod]
             imports.append({"specs": specs, "level": node.level, "start": node.lineno, "end": node.end_lineno})
-    return {"functions": functions, "calls": calls, "interface": interface(tree), "imports": imports, "classes": classes}
+    return {"functions": functions, "calls": calls, "interface": interface(tree), "imports": imports,
+            "classes": classes, "statements": statements(tree)}
 
 
 if __name__ == "__main__":

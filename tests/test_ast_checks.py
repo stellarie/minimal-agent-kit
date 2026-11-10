@@ -220,6 +220,74 @@ class AstChecksTests(unittest.TestCase):
         self.plan["slices"][0]["interface"] = ["K"]
         self.assertEqual({"reduction:a.py:go"}, self.ids(phase=2))
 
+    def commit_pkg(self):
+        (self.root / "pkg").mkdir()
+        self.write("pkg/__init__.py", "def helper():\n    return 1\n")
+        self.write("pkg/own.py", "O = 1\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "pkg")
+
+    def test_package_init_import_needs_depends(self):
+        self.commit_pkg()
+        self.plan["slices"][0]["files"].append("pkg/__init__.py")
+        self.two_slices("pkg/m.py")
+        self.write("pkg/m.py", "from . import helper\n")
+        self.assertIn("depends:pkg/m.py:S1", self.ids())
+
+    def test_every_name_in_one_import_counts(self):
+        self.commit_pkg()
+        self.write("pkg/x.py", "X = 1\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "x")
+        self.plan["slices"][0]["files"].append("pkg/x.py")
+        s2 = self.two_slices("pkg/m.py")
+        s2["files"].append("pkg/own.py")
+        self.write("pkg/m.py", "from . import own, x\n")
+        self.assertIn("depends:pkg/m.py:S1", self.ids())
+
+    def test_sibling_import_needs_depends(self):
+        (self.root / "src").mkdir()
+        self.write("src/y.py", "Y = 1\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "src")
+        self.plan["slices"][0]["files"].append("src/y.py")
+        self.two_slices("src/m.py")
+        self.write("src/m.py", "import y\n")
+        self.assertIn("depends:src/m.py:S1", self.ids())
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_js_bare_specifier_is_not_a_python_file(self):
+        self.two_slices("m.js")
+        self.write("m.js", "const a = require('a');\nmodule.exports = { a };\n")
+        self.plan["slices"][1]["calls"] = ["require"]
+        self.plan["slices"][1]["interface"] = ["export a"]
+        self.assertEqual(set(), self.ids())
+
+    def test_each_statement_needs_its_own_done(self):
+        self.write("a.py", "def keep(x):\n    return x + 1\n\n\nA = 1\nB = 2\n")
+        self.plan["slices"][0]["pseudocode"] = [{"line": 1, "text": "a", "done": "a.py:5"}]
+        self.assertEqual({"reduction:a.py:6"}, self.ids(phase=2))
+
+    def test_multiline_statement_is_one_unit(self):
+        self.write("a.py", "def keep(x):\n    return x + 1\n\n\nCONFIG = {\n    'a': 1,\n\n    'b': 2,\n}\n")
+        self.plan["slices"][0]["pseudocode"] = [{"line": 1, "text": "c", "done": "a.py:8"}]
+        self.assertEqual(set(), self.ids(phase=2))
+
+    def test_decorator_belongs_to_its_function(self):
+        self.write("a.py", "def keep(x):\n    return x + 1\n\n\n@staticmethod\ndef other():\n    return 2\n")
+        self.plan["slices"][0]["interface"] = ["other"]
+        self.plan["slices"][0]["pseudocode"] = [{"line": 1, "text": "o", "done": "a.py:7"}]
+        self.assertEqual(set(), self.ids(phase=2))
+
+    def test_module_docstring_is_not_code(self):
+        self.write("a.py", '"""Doc."""\ndef keep(x):\n    return x + 1\n')
+        self.assertEqual(set(), self.ids(phase=2))
+
+    def test_colored_diff_config_still_reads_lines(self):
+        self.git("config", "color.diff", "always")
+        self.write("a.py", "def keep(x):\n    return other(x)\n")
+        self.assertIn("eta:a.py:keep:1", self.ids())
+
     def test_subdirectory_root_and_space_in_name(self):
         sub = self.root / "sub"
         sub.mkdir()

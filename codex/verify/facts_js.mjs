@@ -1,7 +1,7 @@
 // Extract syntax facts from JS or JSX source on stdin. Print them as JSON.
 // Facts: functions (name, start, end, passthrough), calls (name, line), interface
 // (exports, Express routes, React component props), imports (module specifiers, lines),
-// classes (lines). Uses the vendored acorn.
+// classes (lines), statements (top-level lines). Uses the vendored acorn.
 
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
@@ -136,7 +136,10 @@ function facts(src) {
       else if (left.startsWith("exports.") || left.startsWith("module.exports.")) iface.add(`export ${left.split(".").pop()}`);
     }
   });
-  return { functions, calls, interface: [...iface].sort(), imports, classes };
+  const statements = tree.body
+    .filter((s) => s.type !== "ImportDeclaration" && !(s.type === "ExpressionStatement" && s.directive))
+    .map(lines);
+  return { functions, calls, interface: [...iface].sort(), imports, classes, statements };
 }
 
 try {

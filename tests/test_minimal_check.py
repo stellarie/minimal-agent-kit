@@ -147,6 +147,24 @@ class MinimalCheckTests(unittest.TestCase):
         self.assertLess(time.time() - t0, 20)
         self.assertEqual({"minimal:baseline": "not-run"}, self.levels(found))
 
+    def test_docstring_and_annotations_are_skipped(self):
+        self.write("a.py", 'def one() -> int:\n    """One."""\n    return 1\n')
+        self.commit("doc")
+        self.assertEqual([], self.run_check())
+
+    def test_test_support_folders_are_skipped(self):
+        (self.root / "tests").mkdir()
+        self.write("tests/helpers.py", "H = 1\n")
+        self.write("conftest.py", "C = 1\n")
+        self.commit("helpers")
+        self.assertEqual([], self.run_check())
+
+    def test_lines_mode_reports_syntax_breaks(self):
+        self.write("a.py", "def one(x=None):\n    if x is None:\n        x = 0\n    return 1\n")
+        self.commit("dead branch")
+        found = self.levels(self.run_check(lines=True))
+        self.assertEqual("not-run", found.get("minimal:syntax"))
+
     def test_main_exit_code(self):
         self.write("a.py", "def one():\n    return 1\n\n\nW = 0\n")
         self.commit("w")

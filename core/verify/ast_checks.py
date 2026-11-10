@@ -61,7 +61,8 @@ def changed_lines(root, base, rel, base_src, head_src):
     if base_src is None:
         return set(range(1, head_src.count("\n") + 2))
     out = set()
-    for m in HUNK.finditer(git(root, "diff", "-U0", base, "--", rel).stdout):
+    diff = git(root, "diff", "-U0", "--no-color", "--no-ext-diff", "--no-textconv", base, "--", rel).stdout
+    for m in HUNK.finditer(diff):
         start, count = int(m[1]), int(m[2] if m[2] is not None else 1)
         out.update(range(start, start + count))
     return out
@@ -101,28 +102,31 @@ def planned(item, entries):
 
 
 def resolve(rel, imp, files):
-    """Return the project file an import names, if it is one of `files`."""
+    """Return the files in `files` that an import names. Each name in the import counts."""
     here = pathlib.PurePosixPath(rel).parent
+    py = pathlib.PurePosixPath(rel).suffix in PY
+    out = set()
     for spec in imp["specs"]:
-        if imp["level"]:
+        parts = [p for p in spec.split(".") if p]
+        if py and imp["level"]:
             base = here
             for _ in range(imp["level"] - 1):
                 base = base.parent
-            stem = base.joinpath(*spec.split(".")) if spec else base
-            tries = [f"{stem}.py", f"{stem}/__init__.py"]
+            stems = [base.joinpath(*parts)]
+        elif py:
+            stems = [pathlib.PurePosixPath(*parts), here.joinpath(*parts)] if parts else []
         elif spec.startswith("."):
             stem = posixpath.normpath(f"{here}/{spec}")
-            tries = [stem] + [stem + e for e in sorted(JS)] + [f"{stem}/index{e}" for e in sorted(JS)]
-        elif "/" not in spec:
-            stem = "/".join(spec.split("."))
-            tries = [f"{stem}.py", f"{stem}/__init__.py"]
+            out.update(t for t in [stem] + [stem + e for e in sorted(JS)] + [f"{stem}/index{e}" for e in sorted(JS)] if t in files)
+            continue
         else:
             continue
-        for t in tries:
-            t = posixpath.normpath(t)
-            if t in files:
-                return t
-    return None
+        for stem in stems:
+            hits = [t for t in (posixpath.normpath(f"{stem}.py"), posixpath.normpath(f"{stem}/__init__.py")) if t in files]
+            if hits:
+                out.add(hits[0])
+                break
+    return out
 
 
 def check_depends(plan, rel, owner, head, lines):
@@ -131,29 +135,28 @@ def check_depends(plan, rel, owner, head, lines):
     for imp in head.get("imports", []):
         if not lines & set(range(imp["start"], imp["end"] + 1)):
             continue
-        target = resolve(rel, imp, owners)
-        other = owners.get(target)
-        if other and other["id"] != owner["id"] and other["id"] not in owner.get("depends", []):
-            fid = f"depends:{rel}:{other['id']}"
-            if fid not in {f["id"] for f in out}:
-                out.append(finding(fid, "signature", f"imports {target} from {other['id']}, which is not in {owner['id']} depends", rel, imp["start"]))
+        for target in sorted(resolve(rel, imp, owners)):
+            other = owners[target]
+            if other["id"] != owner["id"] and other["id"] not in owner.get("depends", []):
+                fid = f"depends:{rel}:{other['id']}"
+                if fid not in {f["id"] for f in out}:
+                    out.append(finding(fid, "signature", f"imports {target} from {other['id']}, which is not in {owner['id']} depends", rel, imp["start"]))
     return out
 
 
-def module_runs(head, head_src, lines):
-    """Changed module-level code lines, grouped into runs of consecutive lines."""
+def module_statements(head, head_src, lines):
+    """Top-level statements with a changed code line outside every function and class body."""
     inside = set()
-    for block in head["functions"] + head.get("classes", []) + head.get("imports", []):
+    for block in head["functions"] + head.get("classes", []):
         inside.update(range(block["start"], block["end"] + 1))
-    text = head_src.splitlines()
-    code = sorted(n for n in lines - inside if n <= len(text) and not TRIVIAL.match(text[n - 1]))
-    runs = []
-    for n in code:
-        if runs and n == runs[-1][-1] + 1:
-            runs[-1].append(n)
-        else:
-            runs.append([n])
-    return runs
+    text = head_src.split("\n")
+    out = []
+    for st in head.get("statements", []):
+        span = set(range(st["start"], st["end"] + 1))
+        code = {n for n in (span & lines) - inside if n <= len(text) and not TRIVIAL.match(text[n - 1])}
+        if code:
+            out.append(st)
+    return out
 
 
 def done_lines(plan, rel):
@@ -197,9 +200,9 @@ def check_file(plan, root, base, rel, phase):
         for fn in touched:
             if not any(a <= fn["start"] and fn["end"] <= b for a, b in spans):
                 out.append(finding(f"reduction:{rel}:{fn['name']}", "reduction", "changed function maps to no pseudocode line", rel, fn["start"]))
-        for run in module_runs(head, head_src or "", lines):
-            if not done & set(run):
-                out.append(finding(f"reduction:{rel}:{run[0]}", "reduction", "changed module-level code maps to no pseudocode line", rel, run[0]))
+        for st in module_statements(head, head_src or "", lines):
+            if not any(st["start"] <= d <= st["end"] for d in done):
+                out.append(finding(f"reduction:{rel}:{st['start']}", "reduction", "changed module-level statement maps to no pseudocode line", rel, st["start"]))
     out += check_depends(plan, rel, owner, head, lines)
     for item in sorted(set(head["interface"]) ^ set(old["interface"])):
         if not planned(item, owner.get("interface", [])):

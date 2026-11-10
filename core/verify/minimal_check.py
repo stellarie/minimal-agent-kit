@@ -3,13 +3,15 @@
 Usage: python minimal_check.py --base REV --test "CMD" [--root DIR] [--lines] [--limit N] [--timeout S]
 Checks the committed diff merge-base(base, HEAD)..HEAD in a temporary git worktree.
 The working tree is not changed. The timeout applies to each test run.
-Skips test files, docs and config, and hunks that add only comments or blank lines.
+Skips test files and folders, docs and config, hunks that add only comments or blank lines,
+and Python changes to docstrings and parameter or return annotations only.
 Source files in other languages give one "consider" finding.
 A hunk that can be undone with the tests still passing gives a "fail" finding.
 The result is only as strong as the tests. Exit 1 when a finding has level "fail".
 """
 
 import argparse
+import ast
 import json
 import os
 import pathlib
@@ -32,6 +34,7 @@ NOT_SOURCE = {
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 COMMENT = re.compile(r"^\s*(#|//|/\*|\*(\s|/|$)|$)")
 LINKS = ["node_modules", ".venv", "venv"]
+TEST_DIRS = {"tests", "test", "__tests__", "spec", "fixtures", "__mocks__"}
 DIFF = ["-c", "core.quotePath=false", "diff", "-U0", "--relative", "--no-color", "--no-ext-diff",
         "--no-textconv", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/"]
 
@@ -76,7 +79,7 @@ def parse(diff):
             else:
                 path = path[2:]
                 name = pathlib.PurePosixPath(path)
-                if verify_plan.TEST_FILE.search(name.name):
+                if verify_plan.TEST_FILE.search(name.name) or name.name == "conftest.py" or TEST_DIRS & set(name.parts[:-1]):
                     rel = None
                 elif name.suffix in CODE:
                     rel = path
@@ -155,8 +158,41 @@ def write(path, text):
         f.write(text)
 
 
+class Strip(ast.NodeTransformer):
+    """Remove docstrings and annotations: they cannot change what a test sees at run time."""
+
+    def generic_visit(self, node):
+        super().generic_visit(node)
+        body = getattr(node, "body", None)
+        if isinstance(body, list) and body and isinstance(body[0], ast.Expr) \
+                and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+            node.body = body[1:] or [ast.Pass()]
+        # Only parameter and return annotations: class-level ones can be dataclass fields.
+        if isinstance(node, ast.arg):
+            node.annotation = None
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            node.returns = None
+        return node
+
+
+def same_behaviour(rel, before, after):
+    """True when a Python file differs only in docstrings and annotations. None when `after` does not parse."""
+    if not rel.endswith(".py"):
+        return False
+    try:
+        new = ast.parse(after)
+    except SyntaxError:
+        return None
+    try:
+        old = ast.parse(before)
+    except SyntaxError:
+        return False
+    return ast.dump(Strip().visit(old)) == ast.dump(Strip().visit(new))
+
+
 def check(tree, cands, cmd, timeout, limit):
     out = []
+    broken = 0
     for n, (rel, line, start, count, repl) in enumerate(cands):
         if n >= limit:
             out.append(finding("minimal:limit", "not-run", f"{len(cands) - limit} hunk(s) past the limit of {limit} were not checked"))
@@ -164,7 +200,14 @@ def check(tree, cands, cmd, timeout, limit):
         path = tree / rel
         text = read(path)
         body = text.split("\n")
-        write(path, "\n".join(body[: start - 1] + repl + body[start - 1 + count:]))
+        undone = "\n".join(body[: start - 1] + repl + body[start - 1 + count:])
+        same = same_behaviour(rel, text, undone)
+        if same:
+            continue
+        if same is None:
+            broken += 1
+            continue
+        write(path, undone)
         try:
             ok = run_tests(cmd, tree, timeout)
         finally:
@@ -174,6 +217,8 @@ def check(tree, cands, cmd, timeout, limit):
             out.append(finding(fid, "not-run", f"tests timed out after {timeout}s with this hunk undone", rel, line))
         elif ok:
             out.append(finding(fid, "fail", "tests still pass with this hunk undone: dead code or a missing test", rel, line))
+    if broken:
+        out.append(finding("minimal:syntax", "not-run", f"{broken} change(s) could not be undone alone without a syntax error; use hunk mode"))
     return out
 
 
