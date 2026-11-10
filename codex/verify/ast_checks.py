@@ -2,13 +2,15 @@
 
 Usage: python ast_checks.py PLAN --base REV [--root DIR] [--phase 1|2|3] [FILE ...]
 Prints findings as JSON (format in plan.schema.md). Exit 1 when a finding has level "fail".
-Checks: files outside every slice, eta, effect calls not in the slice, functions without a
+Checks: files outside every slice, eta, effect calls not in the slice, imports from a slice not in
+`depends`, functions and module-level code without a
 pseudocode `done` location (phase 2 and later), and public interface changes not in the slice.
 """
 
 import argparse
 import json
 import pathlib
+import posixpath
 import re
 import shutil
 import subprocess
@@ -32,6 +34,7 @@ EFFECTS = re.compile(
 # Method names that often mean an effect, but also name pure methods such as list.remove.
 # A hit is reported at level "consider" and never blocks.
 MAYBE = re.compile(r"\.(write|send|query|execute|executemany|commit|remove|post|put|delete|insert|update|emit)$")
+TRIVIAL = re.compile(r"^\s*(#|//|/\*|\*|[\]\)\};,]*\s*$)")
 HUNK = re.compile(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@", re.M)
 
 
@@ -97,6 +100,62 @@ def planned(item, entries):
     return name in {e.split(".")[-1] for e in entries}
 
 
+def resolve(rel, imp, files):
+    """Return the project file an import names, if it is one of `files`."""
+    here = pathlib.PurePosixPath(rel).parent
+    for spec in imp["specs"]:
+        if imp["level"]:
+            base = here
+            for _ in range(imp["level"] - 1):
+                base = base.parent
+            stem = base.joinpath(*spec.split(".")) if spec else base
+            tries = [f"{stem}.py", f"{stem}/__init__.py"]
+        elif spec.startswith("."):
+            stem = posixpath.normpath(f"{here}/{spec}")
+            tries = [stem] + [stem + e for e in sorted(JS)] + [f"{stem}/index{e}" for e in sorted(JS)]
+        elif "/" not in spec:
+            stem = "/".join(spec.split("."))
+            tries = [f"{stem}.py", f"{stem}/__init__.py"]
+        else:
+            continue
+        for t in tries:
+            t = posixpath.normpath(t)
+            if t in files:
+                return t
+    return None
+
+
+def check_depends(plan, rel, owner, head, lines):
+    owners = {f: s for s in plan.get("slices", []) for f in s.get("files", [])}
+    out = []
+    for imp in head.get("imports", []):
+        if not lines & set(range(imp["start"], imp["end"] + 1)):
+            continue
+        target = resolve(rel, imp, owners)
+        other = owners.get(target)
+        if other and other["id"] != owner["id"] and other["id"] not in owner.get("depends", []):
+            fid = f"depends:{rel}:{other['id']}"
+            if fid not in {f["id"] for f in out}:
+                out.append(finding(fid, "signature", f"imports {target} from {other['id']}, which is not in {owner['id']} depends", rel, imp["start"]))
+    return out
+
+
+def module_runs(head, head_src, lines):
+    """Changed module-level code lines, grouped into runs of consecutive lines."""
+    inside = set()
+    for block in head["functions"] + head.get("classes", []) + head.get("imports", []):
+        inside.update(range(block["start"], block["end"] + 1))
+    text = head_src.splitlines()
+    code = sorted(n for n in lines - inside if n <= len(text) and not TRIVIAL.match(text[n - 1]))
+    runs = []
+    for n in code:
+        if runs and n == runs[-1][-1] + 1:
+            runs[-1].append(n)
+        else:
+            runs.append([n])
+    return runs
+
+
 def done_lines(plan, rel):
     out = set()
     for s in plan.get("slices", []):
@@ -138,6 +197,10 @@ def check_file(plan, root, base, rel, phase):
         for fn in touched:
             if not any(a <= fn["start"] and fn["end"] <= b for a, b in spans):
                 out.append(finding(f"reduction:{rel}:{fn['name']}", "reduction", "changed function maps to no pseudocode line", rel, fn["start"]))
+        for run in module_runs(head, head_src or "", lines):
+            if not done & set(run):
+                out.append(finding(f"reduction:{rel}:{run[0]}", "reduction", "changed module-level code maps to no pseudocode line", rel, run[0]))
+    out += check_depends(plan, rel, owner, head, lines)
     for item in sorted(set(head["interface"]) ^ set(old["interface"])):
         if not planned(item, owner.get("interface", [])):
             change = "added or changed" if item in head["interface"] else "removed or changed"

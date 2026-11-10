@@ -95,6 +95,58 @@ class MinimalCheckTests(unittest.TestCase):
         self.assertEqual("dirty\n", (self.root / "a.py").read_text())
         self.assertEqual(1, self.git("worktree", "list").count("\n"))
 
+    def test_lines_mode_is_exact(self):
+        self.write("a.py", "def one():\n    x = 5\n    return 1\n")
+        self.commit("extra line")
+        self.assertEqual({"minimal:a.py:2": "fail"}, self.levels(self.run_check(lines=True)))
+
+    def test_bad_base_is_not_run(self):
+        self.assertEqual({"minimal:diff": "not-run"}, self.levels(minimal_check.run(self.root, "nope123", TEST)))
+
+    def test_space_unicode_and_noprefix(self):
+        self.git("config", "diff.noprefix", "true")
+        self.write("my é.py", "Q = 1\n")
+        self.commit("odd name")
+        self.assertEqual({"minimal:my é.py:1": "fail"}, self.levels(self.run_check()))
+
+    def test_removed_line_starting_with_dashes(self):
+        diff = "+++ b/a.js\n@@ -2 +2,2 @@\n---c;\n+c = c - 1;\n+++ d;\n"
+        hunks, _, _ = minimal_check.parse(diff)
+        self.assertEqual([("a.js", 2, ["--c;"], ["c = c - 1;", "++ d;"])], hunks)
+
+    def test_form_feed_keeps_line_numbers(self):
+        self.write("a.py", "\x0c\ndef one():\n    return 1\n\n\nZ = 9\n")
+        self.commit("ff")
+        self.assertEqual({"minimal:a.py:4": "fail"}, self.levels(self.run_check()))
+
+    def test_moved_base_uses_merge_base(self):
+        self.git("branch", "side")
+        self.write("b.py", "B = 1\n")
+        self.commit("branch work")
+        self.git("checkout", "-q", "side")
+        self.write("a.py", "def one():\n    return 0 + 1\n")
+        self.commit("main moved")
+        self.git("checkout", "-q", "-")
+        self.assertEqual({"minimal:b.py:1"}, set(self.levels(minimal_check.run(self.root, "side", TEST))))
+
+    def test_other_language_is_a_note(self):
+        self.write("lib.rs", "fn main() {}\n")
+        self.commit("rust")
+        self.assertEqual({"minimal:skipped": "consider"}, self.levels(self.run_check()))
+
+    def test_timeout_is_not_run(self):
+        self.write("a.py", "def one():\n    return 1\n\n\nT = 1\n")
+        self.commit("t")
+        slow = f'"{sys.executable}" -c "import os,time; time.sleep(30) if os.path.exists(\'flag\') else None"'
+        (self.root / "flag").write_text("")
+        self.git("add", "flag")
+        self.commit("flag")
+        import time
+        t0 = time.time()
+        found = minimal_check.run(self.root, self.base, slow, timeout=2)
+        self.assertLess(time.time() - t0, 20)
+        self.assertEqual({"minimal:baseline": "not-run"}, self.levels(found))
+
     def test_main_exit_code(self):
         self.write("a.py", "def one():\n    return 1\n\n\nW = 0\n")
         self.commit("w")

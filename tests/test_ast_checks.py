@@ -173,6 +173,53 @@ class AstChecksTests(unittest.TestCase):
         self.plan["slices"][0]["interface"] = ["now"]
         self.assertEqual(set(), self.ids())
 
+    def two_slices(self, second):
+        self.plan["slices"].append({"id": "S2", "files": [second], "depends": [], "calls": [], "interface": [], "pseudocode": []})
+        return self.plan["slices"][1]
+
+    def test_import_needs_depends(self):
+        s2 = self.two_slices("b.py")
+        self.write("b.py", "import a\n\nX = a.keep\n")
+        self.assertIn("depends:b.py:S1", self.ids())
+        s2["depends"] = ["S1"]
+        self.assertEqual(set(), self.ids())
+
+    def test_relative_import_needs_depends(self):
+        (self.root / "pkg").mkdir()
+        self.write("pkg/__init__.py", "")
+        self.write("pkg/y.py", "Y = 1\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "pkg")
+        self.plan["slices"][0]["files"].append("pkg/y.py")
+        self.two_slices("pkg/x.py")
+        self.write("pkg/x.py", "from . import y\nfrom .y import Y\n")
+        self.assertIn("depends:pkg/x.py:S1", self.ids())
+
+    def test_same_slice_and_package_imports_are_free(self):
+        self.write("a.py", "import json\nfrom os import path\n\ndef keep(x):\n    return x + 1\n")
+        self.assertEqual(set(), self.ids())
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_js_import_needs_depends(self):
+        self.write("lib.js", "export const n = 1;\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "lib")
+        self.plan["slices"][0]["files"].append("lib.js")
+        self.two_slices("use.js")
+        self.write("use.js", "import { n } from './lib';\nconst m = require('./lib.js');\nimport x from 'express';\n")
+        self.assertIn("depends:use.js:S1", self.ids())
+
+    def test_module_level_code_needs_done(self):
+        self.write("a.py", "import os\n\ndef keep(x):\n    return x + 1\n\n\nLIMIT = 5\n")
+        self.assertEqual({"reduction:a.py:7"}, self.ids(phase=2))
+        self.plan["slices"][0]["pseudocode"] = [{"line": 1, "text": "limit", "done": "a.py:7"}]
+        self.assertEqual(set(), self.ids(phase=2))
+
+    def test_class_body_follows_method_rule(self):
+        self.write("a.py", "def keep(x):\n    return x + 1\n\n\nclass K:\n    def go(self):\n        return 1\n")
+        self.plan["slices"][0]["interface"] = ["K"]
+        self.assertEqual({"reduction:a.py:go"}, self.ids(phase=2))
+
     def test_subdirectory_root_and_space_in_name(self):
         sub = self.root / "sub"
         sub.mkdir()

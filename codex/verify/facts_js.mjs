@@ -1,6 +1,7 @@
 // Extract syntax facts from JS or JSX source on stdin. Print them as JSON.
 // Facts: functions (name, start, end, passthrough), calls (name, line), interface
-// (exports, Express routes, React component props). Uses the vendored acorn.
+// (exports, Express routes, React component props), imports (module specifiers, lines),
+// classes (lines). Uses the vendored acorn.
 
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
@@ -89,7 +90,20 @@ function facts(src) {
   const functions = [];
   const calls = [];
   const iface = new Set();
+  const imports = [];
+  const classes = [];
+  const lines = (n) => ({ start: n.loc.start.line, end: n.loc.end.line });
+  const isString = (a) => a && a.type === "Literal" && typeof a.value === "string";
   walk(tree, (n, parent) => {
+    if (n.type === "ImportDeclaration" || ((n.type === "ExportNamedDeclaration" || n.type === "ExportAllDeclaration") && n.source)) {
+      imports.push({ specs: [n.source.value], level: 0, ...lines(n) });
+    } else if (n.type === "ImportExpression" && isString(n.source)) {
+      imports.push({ specs: [n.source.value], level: 0, ...lines(n) });
+    } else if (n.type === "CallExpression" && n.callee.type === "Identifier" && n.callee.name === "require" && isString(n.arguments[0])) {
+      imports.push({ specs: [n.arguments[0].value], level: 0, ...lines(n) });
+    } else if (n.type === "ClassDeclaration" || n.type === "ClassExpression") {
+      classes.push(lines(n));
+    }
     if (n.type === "FunctionDeclaration" || n.type === "FunctionExpression" || n.type === "ArrowFunctionExpression") {
       const name = fnName(n, parent);
       functions.push({ name, start: n.loc.start.line, end: n.loc.end.line, passthrough: passthrough(n) });
@@ -122,7 +136,7 @@ function facts(src) {
       else if (left.startsWith("exports.") || left.startsWith("module.exports.")) iface.add(`export ${left.split(".").pop()}`);
     }
   });
-  return { functions, calls, interface: [...iface].sort() };
+  return { functions, calls, interface: [...iface].sort(), imports, classes };
 }
 
 try {

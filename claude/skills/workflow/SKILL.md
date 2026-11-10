@@ -41,7 +41,7 @@ Guiding question for every phase: what is the minimal amount of code and impact 
 | Script | Checks |
 |---|---|
 | `verify_plan.py PLAN --phase N` | Plan structure. Merges the other findings. Its exit code is a gate. |
-| `ast_checks.py PLAN --base REV` | Changed Python and JS code against the plan: files, `eta`, effects, `done` lines, public interface |
+| `ast_checks.py PLAN --base REV` | Changed Python and JS code against the plan: files, `eta`, effects, imports against `depends`, `done` lines, public interface |
 | `check_tools.py --base REV` | The check tools the project has configured. A missing tool is a note, not a fail. |
 | `minimal_check.py --base REV --test CMD` | Undoes each changed hunk alone in a temporary worktree. A test must fail, or the hunk is not needed. |
 
