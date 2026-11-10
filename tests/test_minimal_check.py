@@ -165,6 +165,27 @@ class MinimalCheckTests(unittest.TestCase):
         found = self.levels(self.run_check(lines=True))
         self.assertEqual("not-run", found.get("minimal:syntax"))
 
+    def test_bom_and_latin1_files_are_checked(self):
+        (self.root / "b.py").write_bytes(b"\xef\xbb\xbfdef f():\n    return 1\n\n\nDEAD = 2\n")
+        (self.root / "c.py").write_bytes(b"# -*- coding: latin-1 -*-\nS = '\xe9'\n")
+        self.commit("encodings")
+        found = self.levels(self.run_check())
+        self.assertEqual({"minimal:b.py:1": "fail", "minimal:c.py:1": "fail"}, found)
+
+    def test_hunk_mode_tests_syntax_breaking_undo(self):
+        self.write("a.py", "def one():\n    return 1\n\n\nX = (1,\n     2,\n     3)\n")
+        self.commit("tuple")
+        self.base = self.rev()
+        self.write("a.py", "def one():\n    return 1\n\n\nX = [1,\n     2,\n     3]\n")
+        self.commit("list")
+        self.assertNotIn("minimal:syntax", self.levels(self.run_check()))
+
+    def test_spec_folder_is_production_code(self):
+        (self.root / "spec").mkdir()
+        self.write("spec/util.py", "DEAD = 5\n")
+        self.commit("spec")
+        self.assertEqual({"minimal:spec/util.py:1": "fail"}, self.levels(self.run_check()))
+
     def test_main_exit_code(self):
         self.write("a.py", "def one():\n    return 1\n\n\nW = 0\n")
         self.commit("w")

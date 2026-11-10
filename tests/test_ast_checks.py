@@ -288,6 +288,41 @@ class AstChecksTests(unittest.TestCase):
         self.write("a.py", "def keep(x):\n    return other(x)\n")
         self.assertIn("eta:a.py:keep:1", self.ids())
 
+    def test_src_layout_import_needs_depends(self):
+        (self.root / "src" / "pkg").mkdir(parents=True)
+        self.write("src/pkg/__init__.py", "")
+        self.write("src/pkg/b.py", "B = 1\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "src")
+        self.plan["slices"][0]["files"].append("src/pkg/b.py")
+        self.two_slices("src/pkg/a.py")
+        self.write("src/pkg/a.py", "from pkg.b import B\n")
+        self.assertIn("depends:src/pkg/a.py:S1", self.ids())
+
+    def test_dotted_import_runs_package_init(self):
+        self.commit_pkg()
+        self.plan["slices"][0]["files"].append("pkg/__init__.py")
+        s2 = self.two_slices("m.py")
+        s2["files"].append("pkg/own.py")
+        self.write("m.py", "import pkg.own\n")
+        self.assertIn("depends:m.py:S1", self.ids())
+
+    def test_package_wins_over_module(self):
+        self.commit_pkg()
+        self.write("pkg.py", "P = 1\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "shadow")
+        self.plan["slices"][0]["files"].append("pkg/__init__.py")
+        s2 = self.two_slices("m.py")
+        s2["files"].append("pkg.py")
+        self.write("m.py", "import pkg\n")
+        self.assertIn("depends:m.py:S1", self.ids())
+
+    def test_compound_statement_children_count_alone(self):
+        self.write("a.py", "def keep(x):\n    return x + 1\n\n\nif __name__ == '__main__':\n    keep(1)\n    G = 9\n")
+        self.plan["slices"][0]["pseudocode"] = [{"line": 1, "text": "run", "done": "a.py:6"}]
+        self.assertEqual({"reduction:a.py:5", "reduction:a.py:7"}, self.ids(phase=2))
+
     def test_subdirectory_root_and_space_in_name(self):
         sub = self.root / "sub"
         sub.mkdir()

@@ -112,21 +112,41 @@ def resolve(rel, imp, files):
             base = here
             for _ in range(imp["level"] - 1):
                 base = base.parent
-            stems = [base.joinpath(*parts)]
+            bases = [base]
         elif py:
-            stems = [pathlib.PurePosixPath(*parts), here.joinpath(*parts)] if parts else []
+            # The plan root, then each folder from the importing file up (src layouts, sibling scripts).
+            bases = [pathlib.PurePosixPath("")] + [here, *here.parents][:-1] if parts else []
         elif spec.startswith("."):
             stem = posixpath.normpath(f"{here}/{spec}")
             out.update(t for t in [stem] + [stem + e for e in sorted(JS)] + [f"{stem}/index{e}" for e in sorted(JS)] if t in files)
             continue
         else:
             continue
-        for stem in stems:
-            hits = [t for t in (posixpath.normpath(f"{stem}.py"), posixpath.normpath(f"{stem}/__init__.py")) if t in files]
+        for base in bases:
+            hits = py_targets(base, parts, files, relative=bool(imp["level"]))
             if hits:
-                out.add(hits[0])
+                out.update(hits)
                 break
     return out
+
+
+def py_targets(base, parts, files, relative):
+    """Files an import runs: each package `__init__.py` on the way, then the module. A package wins over a module."""
+    def norm(p):
+        return posixpath.normpath(str(p))
+    hits = []
+    for i in range(1, len(parts)):
+        init = norm(base.joinpath(*parts[:i], "__init__.py"))
+        if init in files:
+            hits.append(init)
+    full = base.joinpath(*parts)
+    for t in (norm(full / "__init__.py"), norm(f"{full}.py")):
+        if t in files:
+            hits.append(t)
+            break
+    if relative and not parts and norm(base / "__init__.py") in files:
+        hits.append(norm(base / "__init__.py"))
+    return hits
 
 
 def check_depends(plan, rel, owner, head, lines):

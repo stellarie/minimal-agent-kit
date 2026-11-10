@@ -136,9 +136,23 @@ function facts(src) {
       else if (left.startsWith("exports.") || left.startsWith("module.exports.")) iface.add(`export ${left.split(".").pop()}`);
     }
   });
-  const statements = tree.body
-    .filter((s) => s.type !== "ImportDeclaration" && !(s.type === "ExpressionStatement" && s.directive))
-    .map(lines);
+  const statements = [];
+  const flatten = (body) => {
+    for (const s of body) {
+      if (s.type === "ImportDeclaration" || (s.type === "ExpressionStatement" && s.directive)) continue;
+      const kids = [s.consequent, s.alternate, s.block, s.handler && s.handler.body, s.finalizer,
+        s.type === "BlockStatement" ? s : null, ["For", "ForIn", "ForOf", "While", "DoWhile"].some((k) => s.type === `${k}Statement`) ? s.body : null]
+        .filter((k) => k && k !== s);
+      if (s.type === "BlockStatement") { flatten(s.body); continue; }
+      if (kids.length) {
+        statements.push({ start: s.loc.start.line, end: s.loc.start.line });
+        kids.forEach((k) => flatten(k.type === "BlockStatement" ? k.body : [k]));
+        continue;
+      }
+      statements.push(lines(s));
+    }
+  };
+  flatten(tree.body);
   return { functions, calls, interface: [...iface].sort(), imports, classes, statements };
 }
 

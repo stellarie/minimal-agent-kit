@@ -72,14 +72,31 @@ def interface(tree):
 def statements(tree):
     """Top-level statements other than imports and the module docstring. Decorators count."""
     out = []
-    for n, node in enumerate(tree.body):
+    body = tree.body
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+        body = body[1:]
+    flatten(body, out)
+    return out
+
+
+COMPOUND = (ast.If, ast.Try, ast.With, ast.AsyncWith, ast.For, ast.AsyncFor, ast.While) + ((ast.TryStar,) if hasattr(ast, "TryStar") else ())
+
+
+def flatten(body, out):
+    """Each simple statement counts alone. A compound statement counts by its header line and its children."""
+    for node in body:
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             continue
-        if n == 0 and isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+        if isinstance(node, COMPOUND):
+            out.append({"start": node.lineno, "end": node.lineno})
+            for field in ("body", "orelse", "finalbody"):
+                flatten(getattr(node, field, []), out)
+            for h in getattr(node, "handlers", []):
+                out.append({"start": h.lineno, "end": h.lineno})
+                flatten(h.body, out)
             continue
         start = min([node.lineno] + [d.lineno for d in getattr(node, "decorator_list", [])])
         out.append({"start": start, "end": node.end_lineno})
-    return out
 
 
 def facts(source):

@@ -34,7 +34,8 @@ NOT_SOURCE = {
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 COMMENT = re.compile(r"^\s*(#|//|/\*|\*(\s|/|$)|$)")
 LINKS = ["node_modules", ".venv", "venv"]
-TEST_DIRS = {"tests", "test", "__tests__", "spec", "fixtures", "__mocks__"}
+# Folder names used only for tests. "spec", "test", and "fixtures" also hold production code.
+TEST_DIRS = {"tests", "__tests__", "__mocks__"}
 DIFF = ["-c", "core.quotePath=false", "diff", "-U0", "--relative", "--no-color", "--no-ext-diff",
         "--no-textconv", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/"]
 
@@ -179,18 +180,19 @@ def same_behaviour(rel, before, after):
     """True when a Python file differs only in docstrings and annotations. None when `after` does not parse."""
     if not rel.endswith(".py"):
         return False
+    # Parse bytes so the BOM and any coding cookie are honoured.
     try:
-        new = ast.parse(after)
-    except SyntaxError:
+        new = ast.parse(after.encode("utf-8", "surrogateescape"))
+    except (SyntaxError, ValueError):
         return None
     try:
-        old = ast.parse(before)
-    except SyntaxError:
+        old = ast.parse(before.encode("utf-8", "surrogateescape"))
+    except (SyntaxError, ValueError):
         return False
     return ast.dump(Strip().visit(old)) == ast.dump(Strip().visit(new))
 
 
-def check(tree, cands, cmd, timeout, limit):
+def check(tree, cands, cmd, timeout, limit, lines=False):
     out = []
     broken = 0
     for n, (rel, line, start, count, repl) in enumerate(cands):
@@ -204,7 +206,7 @@ def check(tree, cands, cmd, timeout, limit):
         same = same_behaviour(rel, text, undone)
         if same:
             continue
-        if same is None:
+        if same is None and lines:
             broken += 1
             continue
         write(path, undone)
@@ -252,7 +254,7 @@ def run(root, base, cmd, lines=False, limit=50, timeout=300):
             return out + [finding("minimal:baseline", "not-run", f"tests at HEAD timed out after {timeout}s")]
         if not base_ok:
             return out + [finding("minimal:baseline", "not-run", "tests do not pass at HEAD in the worktree; check the command and dependencies")]
-        return out + check(tree, cands, cmd, timeout, limit)
+        return out + check(tree, cands, cmd, timeout, limit, lines)
     finally:
         for link in links:
             unlink(link)
