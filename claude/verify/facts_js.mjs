@@ -148,7 +148,12 @@ function facts(src) {
         // The header runs from the keyword to the line where the first child starts.
         statements.push({ start: s.loc.start.line, end: Math.max(s.loc.start.line, kids[0].loc.start.line) });
         if (s.handler) statements.push({ start: s.handler.loc.start.line, end: s.handler.body.loc.start.line });
-        if (s.type === "DoWhileStatement") statements.push({ start: s.body.loc.end.line, end: s.loc.end.line });
+        if (s.type === "DoWhileStatement") {
+          // The tail starts after the last body statement, so the two never share a line.
+          const b = s.body;
+          const last = b.type === "BlockStatement" ? (b.body.length ? b.body[b.body.length - 1].loc.end.line : b.loc.start.line) : b.loc.end.line;
+          if (last < s.loc.end.line) statements.push({ start: last + 1, end: s.loc.end.line });
+        }
         kids.forEach((k) => flatten(k.type === "BlockStatement" ? k.body : [k]));
         continue;
       }

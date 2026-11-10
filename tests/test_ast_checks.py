@@ -356,6 +356,16 @@ class AstChecksTests(unittest.TestCase):
         self.write("m.js", "let i = 0;\ndo {\n  i++;\n} while (i < 9);\n")
         self.assertEqual({"reduction:m.js:4"}, self.ids(phase=2))
 
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_js_do_while_body_line_is_not_the_tail(self):
+        self.plan["slices"][0]["files"].append("m.js")
+        self.write("m.js", "let x = 0;\ndo\n  x = f(x,\n    1);\nwhile (x < 3);\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "do")
+        self.write("m.js", "let x = 0;\ndo\n  x = f(x,\n    2);\nwhile (x < 3);\n")
+        self.plan["slices"][0]["pseudocode"] = [{"line": 1, "text": "x", "done": "m.js:3"}]
+        self.assertEqual(set(), self.ids(phase=2))
+
     def test_stdlib_name_in_ancestor_folder_is_not_a_depend(self):
         (self.root / "myapp" / "cmd").mkdir(parents=True)
         self.write("myapp/logging.py", "L = 1\n")
