@@ -172,13 +172,21 @@ class MinimalCheckTests(unittest.TestCase):
         found = self.levels(self.run_check())
         self.assertEqual({"minimal:b.py:1": "fail", "minimal:c.py:1": "fail"}, found)
 
-    def test_hunk_mode_tests_syntax_breaking_undo(self):
+    def test_hunk_mode_reports_syntax_breaking_undo(self):
         self.write("a.py", "def one():\n    return 1\n\n\nX = (1,\n     2,\n     3)\n")
         self.commit("tuple")
         self.base = self.rev()
         self.write("a.py", "def one():\n    return 1\n\n\nX = [1,\n     2,\n     3]\n")
         self.commit("list")
-        self.assertNotIn("minimal:syntax", self.levels(self.run_check()))
+        found = minimal_check.run(self.root, self.base, TEST)
+        self.assertEqual(["minimal:syntax"], [f["id"] for f in found])
+        self.assertIn("by hand", found[0]["detail"])
+
+    def test_mocha_test_folder_is_skipped(self):
+        (self.root / "test").mkdir()
+        self.write("test/array.js", "it('works', () => {});\n")
+        self.commit("mocha")
+        self.assertEqual([], self.run_check())
 
     def test_spec_folder_is_production_code(self):
         (self.root / "spec").mkdir()

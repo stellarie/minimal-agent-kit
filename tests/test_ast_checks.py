@@ -323,6 +323,32 @@ class AstChecksTests(unittest.TestCase):
         self.plan["slices"][0]["pseudocode"] = [{"line": 1, "text": "run", "done": "a.py:6"}]
         self.assertEqual({"reduction:a.py:5", "reduction:a.py:7"}, self.ids(phase=2))
 
+    def test_multiline_compound_header_counts(self):
+        self.write("a.py", "def keep(x):\n    return x + 1\n\n\nif (keep(1) and\n        keep(2)):\n    pass\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "if")
+        self.write("a.py", "def keep(x):\n    return x + 1\n\n\nif (keep(1) and\n        keep(3)):\n    pass\n")
+        self.assertEqual({"reduction:a.py:5"}, self.ids(phase=2))
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_js_header_and_catch_count(self):
+        self.plan["slices"][0]["files"].append("m.js")
+        self.write("m.js", "if (a &&\n  b) {\n  f();\n}\ntry {\n  g();\n} catch (e) {\n  h();\n}\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "js")
+        self.write("m.js", "if (a &&\n  c) {\n  f();\n}\ntry {\n  g();\n} catch ({ code }) {\n  h();\n}\n")
+        self.assertEqual({"reduction:m.js:1", "reduction:m.js:7"}, self.ids(phase=2))
+
+    def test_stdlib_name_in_ancestor_folder_is_not_a_depend(self):
+        (self.root / "myapp" / "cmd").mkdir(parents=True)
+        self.write("myapp/logging.py", "L = 1\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "app")
+        self.plan["slices"][0]["files"].append("myapp/logging.py")
+        self.two_slices("myapp/cmd/run.py")
+        self.write("myapp/cmd/run.py", "import logging\n")
+        self.assertEqual(set(), self.ids())
+
     def test_subdirectory_root_and_space_in_name(self):
         sub = self.root / "sub"
         sub.mkdir()

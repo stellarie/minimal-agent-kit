@@ -145,7 +145,9 @@ function facts(src) {
         .filter((k) => k && k !== s);
       if (s.type === "BlockStatement") { flatten(s.body); continue; }
       if (kids.length) {
-        statements.push({ start: s.loc.start.line, end: s.loc.start.line });
+        // The header runs from the keyword to the line where the first child starts.
+        statements.push({ start: s.loc.start.line, end: Math.max(s.loc.start.line, kids[0].loc.start.line) });
+        if (s.handler) statements.push({ start: s.handler.loc.start.line, end: s.handler.body.loc.start.line });
         kids.forEach((k) => flatten(k.type === "BlockStatement" ? k.body : [k]));
         continue;
       }

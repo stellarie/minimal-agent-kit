@@ -34,8 +34,8 @@ NOT_SOURCE = {
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 COMMENT = re.compile(r"^\s*(#|//|/\*|\*(\s|/|$)|$)")
 LINKS = ["node_modules", ".venv", "venv"]
-# Folder names used only for tests. "spec", "test", and "fixtures" also hold production code.
-TEST_DIRS = {"tests", "__tests__", "__mocks__"}
+# Folder names used for tests ("test" is the mocha default). "spec" and "fixtures" also hold production code.
+TEST_DIRS = {"tests", "test", "__tests__", "__mocks__"}
 DIFF = ["-c", "core.quotePath=false", "diff", "-U0", "--relative", "--no-color", "--no-ext-diff",
         "--no-textconv", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/"]
 
@@ -206,7 +206,7 @@ def check(tree, cands, cmd, timeout, limit, lines=False):
         same = same_behaviour(rel, text, undone)
         if same:
             continue
-        if same is None and lines:
+        if same is None:
             broken += 1
             continue
         write(path, undone)
@@ -220,7 +220,8 @@ def check(tree, cands, cmd, timeout, limit, lines=False):
         elif ok:
             out.append(finding(fid, "fail", "tests still pass with this hunk undone: dead code or a missing test", rel, line))
     if broken:
-        out.append(finding("minimal:syntax", "not-run", f"{broken} change(s) could not be undone alone without a syntax error; use hunk mode"))
+        out.append(finding("minimal:syntax", "not-run", f"{broken} change(s) could not be undone alone without a syntax error"
+                                + ("; try hunk mode" if lines else "; check them by hand")))
     return out
 
 

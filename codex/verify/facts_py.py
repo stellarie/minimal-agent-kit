@@ -88,11 +88,11 @@ def flatten(body, out):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             continue
         if isinstance(node, COMPOUND):
-            out.append({"start": node.lineno, "end": node.lineno})
+            out.append({"start": node.lineno, "end": max(node.lineno, node.body[0].lineno - 1)})
             for field in ("body", "orelse", "finalbody"):
                 flatten(getattr(node, field, []), out)
             for h in getattr(node, "handlers", []):
-                out.append({"start": h.lineno, "end": h.lineno})
+                out.append({"start": h.lineno, "end": max(h.lineno, h.body[0].lineno - 1)})
                 flatten(h.body, out)
             continue
         start = min([node.lineno] + [d.lineno for d in getattr(node, "decorator_list", [])])

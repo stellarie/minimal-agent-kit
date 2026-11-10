@@ -114,8 +114,9 @@ def resolve(rel, imp, files):
                 base = base.parent
             bases = [base]
         elif py:
-            # The plan root, then each folder from the importing file up (src layouts, sibling scripts).
-            bases = [pathlib.PurePosixPath("")] + [here, *here.parents][:-1] if parts else []
+            # sys.path roots only: the plan root, a src layout, and the script's own folder.
+            # Other ancestor folders are not on sys.path, so `import logging` there is the stdlib.
+            bases = [pathlib.PurePosixPath(""), pathlib.PurePosixPath("src"), here] if parts else []
         elif spec.startswith("."):
             stem = posixpath.normpath(f"{here}/{spec}")
             out.update(t for t in [stem] + [stem + e for e in sorted(JS)] + [f"{stem}/index{e}" for e in sorted(JS)] if t in files)
