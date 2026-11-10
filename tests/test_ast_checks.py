@@ -366,6 +366,16 @@ class AstChecksTests(unittest.TestCase):
         self.plan["slices"][0]["pseudocode"] = [{"line": 1, "text": "x", "done": "m.js:3"}]
         self.assertEqual(set(), self.ids(phase=2))
 
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_js_do_while_condition_on_body_line(self):
+        self.plan["slices"][0]["files"].append("m.js")
+        self.write("m.js", "let i = 0;\ndo {\n  i++; } while (i < 3 &&\n  ok);\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "do")
+        self.write("m.js", "let i = 0;\ndo {\n  i++; } while (i < 3 &&\n  ok2);\n")
+        self.plan["slices"][0]["pseudocode"] = [{"line": 1, "text": "w", "done": "m.js:3"}]
+        self.assertEqual(set(), self.ids(phase=2))
+
     def test_stdlib_name_in_ancestor_folder_is_not_a_depend(self):
         (self.root / "myapp" / "cmd").mkdir(parents=True)
         self.write("myapp/logging.py", "L = 1\n")

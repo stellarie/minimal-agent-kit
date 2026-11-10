@@ -152,7 +152,9 @@ function facts(src) {
           // The tail starts after the last body statement, so the two never share a line.
           const b = s.body;
           const last = b.type === "BlockStatement" ? (b.body.length ? b.body[b.body.length - 1].loc.end.line : b.loc.start.line) : b.loc.end.line;
-          if (last < s.loc.end.line) statements.push({ start: last + 1, end: s.loc.end.line });
+          // A condition that starts on that line and runs on keeps its first line.
+          const start = s.test.loc.start.line <= last ? s.test.loc.start.line : last + 1;
+          if (last < s.loc.end.line) statements.push({ start, end: s.loc.end.line });
         }
         kids.forEach((k) => flatten(k.type === "BlockStatement" ? k.body : [k]));
         continue;
