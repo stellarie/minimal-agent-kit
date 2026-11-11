@@ -16,7 +16,7 @@ Use the `workflow` skill for any change that needs a plan. Phases:
 
 ## Memory
 
-- On task start, read `docs/wiki/index.md` if it exists.
+- On task start, read the project wiki index if it exists: `~/notes/wiki/<project>/index.md`.
 - Use the `wiki` skill to read, create, or update pages.
 - A wiki fact is a hint. The code is the truth. Check before you rely on it.
 

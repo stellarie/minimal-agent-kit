@@ -4,7 +4,7 @@ Goal: an approved scope, a "not written" list, slices with contracts, a diagram,
 
 ## 1.1 Recall
 
-1. Read `docs/wiki/index.md`. Open each page that matches the task.
+1. Read the project wiki index. The `wiki` skill gives the location. Open each page that matches the task.
 2. Search cross-project memory if the harness has it, for example `memory_search`.
 3. For each wiki page you use, check that its `source_commit` is current for the cited files.
 4. Note what you know, and what you still need to find.

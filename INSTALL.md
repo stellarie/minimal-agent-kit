@@ -118,8 +118,9 @@ For Claude Code, after the restart:
 In a project that uses the kit:
 
 ```bash
-mkdir -p docs/wiki
-printf '# Wiki index\n' > docs/wiki/index.md
+wiki="${WIKI_ROOT:-$HOME/notes/wiki}/$(basename "$PWD")"
+mkdir -p "$wiki"
+printf '# Wiki index\n' > "$wiki/index.md"
 grep -qx '.kit/' .gitignore 2>/dev/null || echo '.kit/' >> .gitignore
 ```
 
