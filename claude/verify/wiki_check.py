@@ -95,7 +95,7 @@ def _check_body(name, lines, start):
     for number, line in enumerate(lines[start:], start + 1):
         opening = FENCE.match(line)
         if fence:
-            if re.fullmatch(f" {{0,3}}{fence[0]}{{{len(fence)},}}\\s*", line):
+            if re.fullmatch(f" {{0,3}}{fence[0]}{{{len(fence)},}}[ \\t]*", line):
                 fence = None
         elif opening:
             fence = opening[1]
