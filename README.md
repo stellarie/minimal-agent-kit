@@ -1,12 +1,12 @@
 <div align="center">
 
-# ♡ minimal-agent-kit ♡
+# minimal-agent-kit
 
-**A small, token-cheap rule kit that keeps coding agents careful and honest~**
+**A small, token-cheap rule kit that keeps coding agents careful and honest**
 
 English · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
 
-`minimal-agent-kit` (｡•̀ᴗ-)✧
+`minimal-agent-kit` 
 
 </div>
 
@@ -135,4 +135,4 @@ cd memory && npm test
 
 ## License
 
-MIT © stellarie. Made with ♡ (≧∀≦)
+MIT © stellarie. Made with ♡
