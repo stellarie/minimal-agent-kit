@@ -74,11 +74,11 @@ python tools/sandbox.py <empty-dir>
 | 名稱 | 類型 | 作用 |
 |---|---|---|
 | `workflow` | 技能 | 設計、實作、審查、收尾。每個階段都有編號子步驟和輸出範本。 |
-| `wiki` | 技能 | 在 `docs/wiki/` 中保存長期專案記憶，頁面格式固定。 |
+| `wiki` | 技能 | 在 `$WIKI_ROOT/<name>/` 中保存長期專案記憶；未設定 `WIKI_ROOT` 時在 `docs/wiki/`。頁面格式固定。 |
 | `ste` | 技能 | 聊天和檔案的 STE 寫作規則。 |
 | `verify/` | 腳本 | 檢查計畫檔，依計畫檢查變更的 Python 和 JS 程式碼，執行專案自己的檢查工具，並證明每個變更區塊都被某個測試需要。 |
 | `tools/sandbox.py` | 腳本 | 一次性建立可重複使用的試驗沙盒（pytest、jest、Express、React），附故障模擬。 |
-| `SessionStart` | 掛鉤 | 載入規則和 `docs/wiki/index.md`。 |
+| `SessionStart` | 掛鉤 | 載入規則和 wiki 的 `index.md`。 |
 | `PreToolUse` | 掛鉤 | 對每次 `Bash` 和 `PowerShell` 呼叫執行 guard。 |
 | `PostToolUse` | 掛鉤 | 對代理寫出的每個 Markdown 檔案執行 STE 檢查。 |
 
@@ -108,8 +108,10 @@ guard 比對的是指令文字。在執行時拼出指令的指令碼可以繞�
 |---|---|---|
 | 拒絕模式 | `core/guard/rules.json` | `mkfs`、寫入裝置的 `dd`、`drop database` 等 |
 | 審查模型 | `core/skills/workflow/review.md` | Claude Code 上為 Opus 5.5（medium），Codex 上為 Sol 6.1（light） |
-| 專案 wiki | 你專案中的 `docs/wiki/` | 無，由 `wiki` 技能建立 |
+| 專案 wiki | `WIKI_ROOT`、`WIKI_NAME` | 你專案中的 `docs/wiki/`。設定 `WIKI_ROOT`（絕對路徑，或以 `~` 開頭）後：`$WIKI_ROOT/<WIKI_NAME 或專案目錄名稱>/`。由 `wiki` 技能建立 |
 | 記憶儲存區 | `AGENT_MEMORY_HOME` | `~/.agent-memory` |
+
+`WIKI_NAME` 是純資料夾名稱，不是路徑。工作階段掛鉤使用 `WIKI_NAME`，或工作階段啟動時所在目錄的名稱。
 
 ## 開發
 

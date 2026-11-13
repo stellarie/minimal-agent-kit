@@ -115,13 +115,22 @@ For Claude Code, after the restart:
 
 ## 5. Set up a project (optional)
 
-In a project that uses the kit:
+In a project that uses the kit, ignore the `.kit/` folder:
+
+```bash
+grep -qx '.kit/' .gitignore 2>/dev/null || echo '.kit/' >> .gitignore
+```
+
+If `WIKI_ROOT` is unset or blank, create the default wiki in the project:
 
 ```bash
 mkdir -p docs/wiki
 printf '# Wiki index\n' > docs/wiki/index.md
-grep -qx '.kit/' .gitignore 2>/dev/null || echo '.kit/' >> .gitignore
 ```
+
+If `WIKI_ROOT` is set, skip that block. `WIKI_ROOT` is an absolute path or starts with `~`. The wiki is `$WIKI_ROOT/<name>/`. `<name>` is `WIKI_NAME`, or the name of the project directory when `WIKI_NAME` is unset or blank. `WIKI_NAME` is a plain folder name, not a path. Use the `wiki` skill to create `index.md` in that folder.
+
+The session hook uses `WIKI_NAME` or the name of the directory where the session starts.
 
 Then use the `wiki` skill to create `standards.md`, `architecture.md`, and `libraries.md`.
 
