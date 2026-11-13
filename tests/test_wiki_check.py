@@ -93,6 +93,10 @@ class WikiCheckTests(unittest.TestCase):
         text = "# Wiki index\n- [Alpha](alpha.md)\n"
         self.assertEqual({"index-line:2": "consider"}, by_id(wiki_check.check_index(text, set())))
 
+    def test_sc2_line_with_an_empty_summary_is_consider(self):
+        text = "# Wiki index\n- [Alpha](alpha.md): \n"
+        self.assertEqual({"index-line:2": "consider"}, by_id(wiki_check.check_index(text, set())))
+
     def test_sc2_text_before_the_dash_is_not_an_index_link(self):
         text = "# Wiki index\nsee - [Alpha](alpha.md): x\n"
         found = wiki_check.check_index(text, {"alpha.md"})
@@ -140,6 +144,9 @@ class WikiCheckTests(unittest.TestCase):
 
     def test_sc5_date_without_dashes_fails(self):
         self.assertEqual({"updated:alpha.md": "fail"}, self.page_ids(PAGE.replace("2026-02-14\nsource", "20260214\nsource")))
+
+    def test_sc5_frontmatter_line_that_is_not_a_field_is_ignored(self):
+        self.assertEqual({}, self.page_ids(PAGE.replace("title: Alpha\n", "title: Alpha\n# c\n")))
 
     def test_sc5_trailing_spaces_after_a_value_are_clean(self):
         self.assertEqual({}, self.page_ids(PAGE.replace("2026-02-14\nsource", "2026-02-14   \nsource")))
@@ -195,6 +202,22 @@ class WikiCheckTests(unittest.TestCase):
         body = "## Summary\nA.\n\n```\nx\n```   \n## Notes\nx\n"
         self.assertEqual({"section:alpha.md:14": "fail"}, self.page_ids(FRONT + body))
 
+    def test_sc6_non_breaking_space_after_a_closing_marker_does_not_close(self):
+        body = "## Summary\nA.\n\n```\n``` \n## Notes\n```\n"
+        self.assertEqual({}, self.page_ids(FRONT + body))
+
+    def test_sc6_closing_marker_may_have_a_three_space_indent(self):
+        body = "## Summary\nA.\n\n```\nx\n   ```\n## Notes\nx\n"
+        self.assertEqual({"section:alpha.md:14": "fail"}, self.page_ids(FRONT + body))
+
+    def test_sc6_closing_marker_may_be_longer_than_the_opener(self):
+        body = "## Summary\nA.\n\n```\nx\n````\n## Notes\nx\n"
+        self.assertEqual({"section:alpha.md:14": "fail"}, self.page_ids(FRONT + body))
+
+    def test_sc6_opener_with_an_info_string_closes_on_the_bare_marker(self):
+        body = "## Summary\nA.\n\n```py\nx\n```\n## Notes\nx\n"
+        self.assertEqual({"section:alpha.md:14": "fail"}, self.page_ids(FRONT + body))
+
     def test_sc6_three_space_indent_opens_a_fence(self):
         body = "## Summary\nA.\n\n   ```\n## Notes\n   ```\n"
         self.assertEqual({}, self.page_ids(FRONT + body))
@@ -222,6 +245,13 @@ class WikiCheckTests(unittest.TestCase):
     def test_sc8_a_blank_line_ends_the_fact_item(self):
         body = "## Summary\nA.\n\n## Facts\n- It does a thing\n\nSee `a.py:3`.\n"
         self.assertEqual({"citation:alpha.md:12": "consider"}, self.page_ids(FRONT + body))
+
+    def test_sc8_a_heading_ends_the_fact_item(self):
+        body = "## Summary\nA.\n\n## Facts\n- f\n## Decisions\n- Chose `x.py:1`: reason (2026-02-14)\n"
+        self.assertEqual({"citation:alpha.md:12": "consider"}, self.page_ids(FRONT + body))
+
+    def test_sc8_dash_without_a_space_is_not_a_fact_item(self):
+        self.assertEqual({}, self.page_ids(FRONT + "## Summary\nA.\n\n## Facts\n-x\n"))
 
     def test_sc9_dead_link_and_unlisted_page_fail(self):
         index = "# Wiki index\n- [Alpha](alpha.md): the alpha page\n- [Gone](gone.md): a gone page\n"
