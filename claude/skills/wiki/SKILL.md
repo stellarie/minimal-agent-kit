@@ -42,6 +42,15 @@ Two environment variables set the location. A blank value counts as unset.
 3. Delete facts that are now false. Do not add a contradicting line next to them.
 4. Set `updated` to today and `source_commit` to `git rev-parse --short HEAD`.
 5. Update the page's line in `index.md`.
+6. Run `python <kit>/verify/wiki_check.py <wiki folder>`. Fix each `fail` finding.
+
+## Check
+
+`python <kit>/verify/wiki_check.py <wiki folder> [--json]` checks the folder against `format.md` and the limits.
+
+- `fail` blocks. The script exits 1.
+- `consider` and `not-run` do not block. The script exits 0.
+- A page in an old format fails. Rewrite it in the current format.
 
 ## Limits
 
