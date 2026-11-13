@@ -27,8 +27,8 @@ Scripts in `$VERIFY` (`SKILL.md`) run these steps. A script result is evidence. 
 
 | Script | Steps |
 |---|---|
-| `verify_plan.py` | signature 1 to 3, lazy 1, confluence 1 and 2, the `done` part of reduction, the K row justifications |
-| `ast_checks.py` | pure-slice 3, signature 4 for public symbols, imports between slices against `depends`, the code-path part of reduction for functions and module-level code, eta 2 |
+| `verify_plan.py` | signature 1 to 3 and the dependency graph (loops, unknown `depends`, duplicate IDs, slice order, unused outputs), lazy 1 (parts and acceptance items), confluence 1 and 2 (shared files, one-sided or dependent `parallel`), the `done` part of reduction, claim evidence, the K row justifications |
+| `ast_checks.py` | pure-slice 3, signature 4 for public symbols, imports between slices against `depends`, import loops between slices, the code-path part of reduction for functions and module-level code, eta 2 |
 | `check_tools.py` | the project's linters, type checkers, coverage, and mutation tools |
 | `minimal_check.py` | lazy, on the code: each changed hunk is needed by a test (1-minimal) |
 
