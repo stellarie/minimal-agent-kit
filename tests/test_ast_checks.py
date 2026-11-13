@@ -386,6 +386,79 @@ class AstChecksTests(unittest.TestCase):
         self.write("myapp/cmd/run.py", "import logging\n")
         self.assertEqual(set(), self.ids())
 
+    def import_cycles(self):
+        return {i for i in self.ids() if i.startswith("import-cycle:")}
+
+    def commit_modules(self, **modules):
+        for name, text in modules.items():
+            self.write(f"{name}.py", text)
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "modules")
+
+    def test_two_slice_import_loop(self):
+        self.two_slices("b.py")
+        self.commit_modules(a="import b\n\ndef keep(x):\n    return x + 1\n", b="import a\n")
+        self.write("a.py", "import b\n\ndef keep(x):\n    return x + 2\n")
+        self.assertEqual({"import-cycle:S1-S2"}, self.import_cycles())
+
+    def test_three_slice_import_loop_is_reported_once(self):
+        self.two_slices("b.py")
+        self.plan["slices"].append({"id": "S3", "files": ["c.py"], "depends": [], "calls": [], "interface": [], "pseudocode": []})
+        self.write("a.py", "import b\n")
+        self.write("b.py", "import c\n")
+        self.write("c.py", "import a\n")
+        self.assertEqual({"import-cycle:S1-S2-S3"}, self.import_cycles())
+
+    def test_import_chain_is_not_a_loop(self):
+        self.two_slices("b.py")
+        self.commit_modules(a="def keep(x):\n    return x + 1\n", b="X = 1\n")
+        self.write("a.py", "import b\n\ndef keep(x):\n    return x + 2\n")
+        self.assertEqual(set(), self.import_cycles())
+
+    def test_import_loop_without_a_changed_slice_is_not_reported(self):
+        self.two_slices("b.py")
+        self.plan["slices"].append({"id": "S3", "files": ["c.py"], "depends": [], "calls": [], "interface": [], "pseudocode": []})
+        self.commit_modules(a="import b\n\ndef keep(x):\n    return x + 1\n", b="import a\n", c="C = 1\n")
+        self.write("c.py", "C = 2\n")
+        self.assertEqual(set(), self.import_cycles())
+
+    def test_import_loop_inside_one_slice_is_free(self):
+        self.plan["slices"][0]["files"].append("b.py")
+        self.commit_modules(a="import b\n\ndef keep(x):\n    return x + 1\n", b="import a\n")
+        self.write("a.py", "import b\n\ndef keep(x):\n    return x + 2\n")
+        self.assertEqual(set(), self.import_cycles())
+
+    def test_int_slice_ids_in_depends(self):
+        self.plan["slices"][0].update(id=1, depends=["2"])
+        self.two_slices("b.py").update(id=2, depends=["1"])
+        self.commit_modules(a="def keep(x):\n    return x + 1\n", b="X = 1\n")
+        self.write("a.py", "import b\n\ndef keep(x):\n    return x + 2\n")
+        self.write("b.py", "import a\n")
+        self.assertEqual(set(), {i for i in self.ids() if i.startswith("depends:")})
+
+    def test_unreadable_plan_file_is_a_note(self):
+        self.two_slices("b.py")
+        self.commit_modules(a="def keep(x):\n    return x + 1\n", b="def (:\n")
+        self.write("a.py", "def keep(x):\n    return x + 2\n")
+        found = {f["id"]: f for f in ast_checks.run(self.plan, self.root, "HEAD", 1)}
+        self.assertEqual("not-run", found["import-cycle:unread"]["level"])
+        self.assertIn("b.py", found["import-cycle:unread"]["detail"])
+
+    def test_loop_is_found_beside_an_unreadable_file(self):
+        self.two_slices("b.py")
+        self.plan["slices"].append({"id": "S3", "files": ["c.py", "d.py"], "depends": [], "calls": [], "interface": [], "pseudocode": []})
+        self.commit_modules(a="import b\n\ndef keep(x):\n    return x + 1\n", b="import a\n", c="def (:\n", d="D = 1\n")
+        self.write("a.py", "import b\n\ndef keep(x):\n    return x + 2\n")
+        self.assertEqual({"import-cycle:S1-S2", "import-cycle:unread"}, self.import_cycles())
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_js_import_loop(self):
+        self.plan["slices"][0]["files"].append("a.js")
+        self.two_slices("b.js")
+        self.write("a.js", "import { y } from './b.js';\nexport const x = 1;\n")
+        self.write("b.js", "import { x } from './a.js';\nexport const y = 1;\n")
+        self.assertEqual({"import-cycle:S1-S2"}, self.import_cycles())
+
     def test_subdirectory_root_and_space_in_name(self):
         sub = self.root / "sub"
         sub.mkdir()

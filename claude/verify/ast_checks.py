@@ -5,6 +5,9 @@ Prints findings as JSON (format in plan.schema.md). Exit 1 when a finding has le
 Checks: files outside every slice, eta, effect calls not in the slice, imports from a slice not in
 `depends`, functions and module-level code without a
 pseudocode `done` location (phase 2 and later), and public interface changes not in the slice.
+Once per run, it also builds the import graph between slices from all Python and JS files in the plan
+and reports each loop that holds the slice of a changed file (`import-cycle:`). A file that fails to
+parse adds no edge. `import-cycle:unread` (level `not-run`) lists such files.
 """
 
 import argparse
@@ -35,6 +38,7 @@ EFFECTS = re.compile(
 # A hit is reported at level "consider" and never blocks.
 MAYBE = re.compile(r"\.(write|send|query|execute|executemany|commit|remove|post|put|delete|insert|update|emit)$")
 TRIVIAL = re.compile(r"^\s*(#|//|/\*|\*|[\]\)\};,]*\s*$)")
+UNREAD_CAP = 5
 HUNK = re.compile(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@", re.M)
 
 
@@ -158,7 +162,7 @@ def check_depends(plan, rel, owner, head, lines):
             continue
         for target in sorted(resolve(rel, imp, owners)):
             other = owners[target]
-            if other["id"] != owner["id"] and other["id"] not in owner.get("depends", []):
+            if str(other["id"]) != str(owner["id"]) and str(other["id"]) not in owner.get("depends", []):
                 fid = f"depends:{rel}:{other['id']}"
                 if fid not in {f["id"] for f in out}:
                     out.append(finding(fid, "signature", f"imports {target} from {other['id']}, which is not in {owner['id']} depends", rel, imp["start"]))
@@ -232,12 +236,52 @@ def check_file(plan, root, base, rel, phase):
     return out
 
 
+def import_graph(plan, root):
+    """Return the slice import graph and the plan files that could not be read.
+
+    Maps each slice ID to the other slices its files import. A missing file is skipped.
+    """
+    owners = {f: str(s["id"]) for s in plan.get("slices", []) for f in s.get("files", [])}
+    graph, unread = {}, []
+    for rel, sid in owners.items():
+        path = root / rel
+        if pathlib.Path(rel).suffix not in PY | JS or not path.is_file():
+            continue
+        head = extract(path.suffix, path.read_text(encoding="utf-8", errors="replace"))
+        if "error" in head:
+            unread.append(rel)
+            continue
+        for imp in head.get("imports", []):
+            graph.setdefault(sid, set()).update(owners[t] for t in resolve(rel, imp, owners) if owners[t] != sid)
+    return graph, unread
+
+
+def check_import_cycles(plan, root, changed):
+    """Report each import loop between slices that holds the slice of a changed file."""
+    touched = {str(s["id"]) for s in plan.get("slices", []) if set(s.get("files", [])) & set(changed)}
+    if not touched:
+        return []
+    graph, unread = import_graph(plan, root)
+    out = [
+        finding("import-cycle:" + "-".join(members), "signature", "slices import each other: " + ", ".join(members))
+        for members in verify_plan.loops(graph)
+        if touched & set(members)
+    ]
+    if unread:
+        more = f" and {len(unread) - UNREAD_CAP} more" if len(unread) > UNREAD_CAP else ""
+        detail = "the import loop check could not read " + ", ".join(unread[:UNREAD_CAP]) + more
+        out.append(finding("import-cycle:unread", "signature", detail, level="not-run"))
+    return out
+
+
 def run(plan, root, base, phase, files=None):
     out = []
+    code = []
     for rel in files or changed_files(root, base):
         if pathlib.Path(rel).suffix in PY | JS:
-            out += check_file(plan, root, base, rel.replace("\\", "/"), phase)
-    return out
+            code.append(rel.replace("\\", "/"))
+            out += check_file(plan, root, base, code[-1], phase)
+    return out + check_import_cycles(plan, root, code)
 
 
 def main(argv):
