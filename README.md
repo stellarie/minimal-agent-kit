@@ -74,11 +74,11 @@ The command needs network access. It prints `sandbox ready: <empty-dir>`. Each t
 | Name | Kind | What it does |
 |---|---|---|
 | `workflow` | skill | Design, implement, review, close. Each phase has numbered substeps and an output template. |
-| `wiki` | skill | Keeps long-term project memory in `docs/wiki/`, with a fixed page format. |
+| `wiki` | skill | Keeps long-term project memory in `$WIKI_ROOT/<name>/`, or in `docs/wiki/` when `WIKI_ROOT` is unset. Fixed page format. |
 | `ste` | skill | The STE writing rules for chat and files. |
 | `verify/` | scripts | Check the plan file and the changed Python and JS code against it, run the project's own check tools, and prove each changed hunk is needed by a test. |
 | `tools/sandbox.py` | script | Sets up a reusable spike sandbox (pytest, jest, Express, React) with fault mocks, once. |
-| `SessionStart` | hook | Loads the rules and `docs/wiki/index.md`. |
+| `SessionStart` | hook | Loads the rules and the wiki `index.md`. |
 | `PreToolUse` | hook | Runs the guard on each `Bash` and `PowerShell` call. |
 | `PostToolUse` | hook | Runs the STE check on each Markdown file the agent writes. |
 
@@ -108,8 +108,10 @@ The review phase sends the diff to a subagent. The author of a change never revi
 |---|---|---|
 | Deny patterns | `core/guard/rules.json` | `mkfs`, `dd` to a device, `drop database`, and others |
 | Review model | `core/skills/workflow/review.md` | Opus 5.5 at medium on Claude Code, Sol 6.1 at light on Codex |
-| Project wiki | `docs/wiki/` in your project | none, the `wiki` skill creates it |
+| Project wiki | `WIKI_ROOT`, `WIKI_NAME` | `docs/wiki/` in your project. With `WIKI_ROOT` set, an absolute path or one that starts with `~`: `$WIKI_ROOT/<WIKI_NAME or project directory name>/`. The `wiki` skill creates it |
 | Memory store | `AGENT_MEMORY_HOME` | `~/.agent-memory` |
+
+`WIKI_NAME` is a plain folder name, not a path. The session hook uses `WIKI_NAME` or the name of the directory where the session starts.
 
 ## Develop
 
