@@ -93,6 +93,11 @@ class WikiCheckTests(unittest.TestCase):
         text = "# Wiki index\n- [Alpha](alpha.md)\n"
         self.assertEqual({"index-line:2": "consider"}, by_id(wiki_check.check_index(text, set())))
 
+    def test_sc2_text_before_the_dash_is_not_an_index_link(self):
+        text = "# Wiki index\nsee - [Alpha](alpha.md): x\n"
+        found = wiki_check.check_index(text, {"alpha.md"})
+        self.assertEqual({"index-line:2": "consider", "index-absent:alpha.md": "fail"}, by_id(found))
+
     def test_sc2_check_wiki_reports_index_findings(self):
         levels = self.levels({"index.md": "# Index\n- [Alpha](alpha.md): the alpha page\n", "alpha.md": PAGE})
         self.assertEqual({"index-heading": "fail"}, levels)
@@ -108,6 +113,13 @@ class WikiCheckTests(unittest.TestCase):
         index = "# Wiki index\n" + "".join(f"- [T]({name}): about it\n" for name in names)
         levels = self.levels({"index.md": index, **{name: PAGE for name in names}})
         self.assertEqual({"name:Home.md": "fail", "name:my_page.md": "fail"}, levels)
+
+    def test_sc4_upper_case_extension_is_a_page_with_a_bad_name(self):
+        levels = self.levels({"index.md": "# Wiki index\n", "Notes.MD": PAGE})
+        self.assertEqual("fail", levels.get("name:Notes.MD"))
+
+    def test_sc4_double_extension_name_fails(self):
+        self.assertEqual({"name:a.md.md": "fail"}, by_id(wiki_check.check_page("a.md.md", PAGE)))
 
     def page_ids(self, text):
         return by_id(wiki_check.check_page("alpha.md", text))
@@ -125,6 +137,12 @@ class WikiCheckTests(unittest.TestCase):
     def test_sc5_impossible_date_fails(self):
         self.assertEqual({"updated:alpha.md": "fail"}, self.page_ids(PAGE.replace("2026-02-14\nsource", "2026-02-30\nsource")))
         self.assertEqual({"updated:alpha.md": "fail"}, self.page_ids(PAGE.replace("2026-02-14\nsource", "14-02-2026\nsource")))
+
+    def test_sc5_date_without_dashes_fails(self):
+        self.assertEqual({"updated:alpha.md": "fail"}, self.page_ids(PAGE.replace("2026-02-14\nsource", "20260214\nsource")))
+
+    def test_sc5_trailing_spaces_after_a_value_are_clean(self):
+        self.assertEqual({}, self.page_ids(PAGE.replace("2026-02-14\nsource", "2026-02-14   \nsource")))
 
     def test_sc5_bad_source_commit_fails(self):
         for bad in ("xyz", "abc123", "a" * 41):
@@ -164,6 +182,22 @@ class WikiCheckTests(unittest.TestCase):
     def test_sc6_backtick_line_with_a_backtick_in_its_info_is_not_a_fence(self):
         body = "## Summary\nA.\n\n```x``` is inline code.\n\n## Notes\nx\n"
         self.assertEqual({"section:alpha.md:13": "fail"}, self.page_ids(FRONT + body))
+
+    def test_sc6_four_space_indent_does_not_open_a_fence(self):
+        body = "## Summary\nA.\n\n    ```\n## Notes\nx\n"
+        self.assertEqual({"section:alpha.md:12": "fail"}, self.page_ids(FRONT + body))
+
+    def test_sc6_four_space_indent_does_not_close_a_fence(self):
+        body = "## Summary\nA.\n\n```\n    ```\n## Notes\n```\n"
+        self.assertEqual({}, self.page_ids(FRONT + body))
+
+    def test_sc6_closing_marker_may_have_trailing_spaces(self):
+        body = "## Summary\nA.\n\n```\nx\n```   \n## Notes\nx\n"
+        self.assertEqual({"section:alpha.md:14": "fail"}, self.page_ids(FRONT + body))
+
+    def test_sc6_three_space_indent_opens_a_fence(self):
+        body = "## Summary\nA.\n\n   ```\n## Notes\n   ```\n"
+        self.assertEqual({}, self.page_ids(FRONT + body))
 
     def test_sc7_eighty_one_lines_fail_and_eighty_pass(self):
         self.assertEqual({"page-lines:alpha.md": "fail"}, by_id(wiki_check.check_page("alpha.md", page_of(81))))
@@ -232,6 +266,16 @@ class WikiCheckTests(unittest.TestCase):
         code, out = self.run_main(path=missing)
         self.assertEqual(0, code)
         self.assertIn("wiki:unread", out)
+
+    def test_sc10_entry_named_md_that_is_not_a_file_is_not_run(self):
+        self.wiki({"index.md": "# Wiki index\n- [Sub](sub.md): a directory\n"})
+        (self.root / "sub.md").mkdir()
+        found = wiki_check.check_wiki(wiki_check.read_wiki(self.root))
+        self.assertEqual({"unread:sub.md": "not-run"}, by_id(found))
+
+    def test_sc10_unread_detail_names_both_causes(self):
+        found = self.check({"index.md": INDEX, "alpha.md": b"\xff\xfe\xfa", "beta.md": PAGE})
+        self.assertEqual("alpha.md cannot be read, or is not UTF-8", found[0]["detail"])
 
     def test_sc10_page_that_is_not_utf8_is_not_run(self):
         levels = self.levels({"index.md": INDEX, "alpha.md": b"\xff\xfe\xfa", "beta.md": PAGE})
