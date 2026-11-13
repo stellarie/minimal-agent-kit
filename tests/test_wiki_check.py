@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "core" / "verify"))
 import wiki_check
@@ -88,6 +89,10 @@ class WikiCheckTests(unittest.TestCase):
         text = "# Wiki index\nSome prose here\n\n- [Alpha](alpha.md): the alpha page\n"
         self.assertEqual({"index-line:2": "consider"}, by_id(wiki_check.check_index(text, {"alpha.md"})))
 
+    def test_sc2_line_without_a_summary_is_consider(self):
+        text = "# Wiki index\n- [Alpha](alpha.md)\n"
+        self.assertEqual({"index-line:2": "consider"}, by_id(wiki_check.check_index(text, set())))
+
     def test_sc2_check_wiki_reports_index_findings(self):
         levels = self.levels({"index.md": "# Index\n- [Alpha](alpha.md): the alpha page\n", "alpha.md": PAGE})
         self.assertEqual({"index-heading": "fail"}, levels)
@@ -150,6 +155,16 @@ class WikiCheckTests(unittest.TestCase):
         self.assertEqual({}, self.page_ids(FRONT + "## Summary\nA.\n\n```\n## Notes\n```\n"))
         self.assertEqual({}, self.page_ids(FRONT + "## Summary\nA.\n\n~~~md\n## Notes\n~~~\n"))
 
+    def test_sc6_fence_closes_only_on_a_marker_of_the_same_kind_and_length(self):
+        head = FRONT + "## Summary\nA.\n\n"
+        self.assertEqual({}, self.page_ids(head + "````\n```\n## Notes\n````\n"))
+        self.assertEqual({}, self.page_ids(head + "```\n~~~\n## Notes\n```\n"))
+        self.assertEqual({}, self.page_ids(head + "```\n```x\n## Notes\n```\n"))
+
+    def test_sc6_backtick_line_with_a_backtick_in_its_info_is_not_a_fence(self):
+        body = "## Summary\nA.\n\n```x``` is inline code.\n\n## Notes\nx\n"
+        self.assertEqual({"section:alpha.md:13": "fail"}, self.page_ids(FRONT + body))
+
     def test_sc7_eighty_one_lines_fail_and_eighty_pass(self):
         self.assertEqual({"page-lines:alpha.md": "fail"}, by_id(wiki_check.check_page("alpha.md", page_of(81))))
         self.assertEqual({}, by_id(wiki_check.check_page("alpha.md", page_of(80))))
@@ -165,6 +180,14 @@ class WikiCheckTests(unittest.TestCase):
         code, out = self.run_main()
         self.assertEqual(0, code)
         self.assertIn("consider  citation:alpha.md:12", out)
+
+    def test_sc8_backticked_fact_without_a_line_number_is_consider(self):
+        body = "## Facts\n- It reads `src/a.py`\n"
+        self.assertEqual({"citation:alpha.md:12": "consider"}, self.page_ids(FRONT + "## Summary\nA.\n\n" + body))
+
+    def test_sc8_a_blank_line_ends_the_fact_item(self):
+        body = "## Summary\nA.\n\n## Facts\n- It does a thing\n\nSee `a.py:3`.\n"
+        self.assertEqual({"citation:alpha.md:12": "consider"}, self.page_ids(FRONT + body))
 
     def test_sc9_dead_link_and_unlisted_page_fail(self):
         index = "# Wiki index\n- [Alpha](alpha.md): the alpha page\n- [Gone](gone.md): a gone page\n"
@@ -192,6 +215,16 @@ class WikiCheckTests(unittest.TestCase):
         self.assertIn("consider  citation:alpha.md:12  alpha.md:12  ", out)
         self.assertEqual("2 finding(s), 1 fail", out.splitlines()[-1])
 
+    def test_sc11_text_output_survives_a_non_utf8_stdout(self):
+        page = FRONT + "## Summary\nA.\n\n## A → B\nx\n"
+        self.wiki({"index.md": "# Wiki index\n- [Alpha](alpha.md): the alpha page\n", "alpha.md": page})
+        out = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+        with contextlib.redirect_stdout(out):
+            code = wiki_check.main([str(self.root)])
+        out.flush()
+        self.assertEqual(1, code)
+        self.assertEqual("1 finding(s), 1 fail", out.buffer.getvalue().decode("ascii").splitlines()[-1])
+
     def test_sc10_path_that_is_not_a_directory_is_not_run(self):
         missing = self.root / "gone"
         found = wiki_check.check_wiki(wiki_check.read_wiki(missing))
@@ -206,6 +239,31 @@ class WikiCheckTests(unittest.TestCase):
         code, out = self.run_main()
         self.assertEqual(0, code)
         self.assertIn("unread:alpha.md", out)
+
+    def test_sc10_directory_that_cannot_be_listed_is_not_run(self):
+        with mock.patch.object(Path, "iterdir", side_effect=PermissionError):
+            found = wiki_check.check_wiki(wiki_check.read_wiki(self.root))
+            self.assertEqual({"wiki:unread": "not-run"}, by_id(found))
+            code, out = self.run_main()
+        self.assertEqual(0, code)
+        self.assertIn("wiki:unread", out)
+
+    def test_sc10_file_that_cannot_be_read_is_not_run(self):
+        real = Path.read_bytes
+
+        def read_bytes(path):
+            if path.name == "alpha.md":
+                raise OSError
+            return real(path)
+
+        self.wiki({"index.md": INDEX, "alpha.md": PAGE, "beta.md": PAGE})
+        with mock.patch.object(Path, "read_bytes", read_bytes):
+            found = wiki_check.check_wiki(wiki_check.read_wiki(self.root))
+        self.assertEqual({"unread:alpha.md": "not-run"}, by_id(found))
+
+    def test_sc10_index_that_is_not_utf8_is_not_run(self):
+        levels = self.levels({"index.md": b"\xff\xfe\xfa", "alpha.md": PAGE})
+        self.assertEqual({"unread:index.md": "not-run"}, levels)
 
 
 if __name__ == "__main__":

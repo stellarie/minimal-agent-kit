@@ -28,6 +28,7 @@ DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 SHA = re.compile(r"[0-9a-fA-F]{7,40}")
 TAG = "standards|architecture|library|gotcha|decision"
 TAG_LIST = re.compile(rf"\[\s*(?:{TAG})(?:\s*,\s*(?:{TAG}))*\s*\]")
+FENCE = re.compile(r"\s*(`{3,}(?!.*`)|~{3,})")
 CITATION = re.compile(r"`[^`\s]+:\d+`")
 SECTIONS = ("Summary", "Facts", "Decisions", "Gotchas")
 KEYS = ("title", "updated", "source_commit", "tags")
@@ -36,8 +37,12 @@ KEYS = ("title", "updated", "source_commit", "tags")
 def read_wiki(folder):
     if not folder.is_dir():
         return None
+    try:
+        paths = sorted(folder.iterdir())
+    except OSError:
+        return None
     files = {}
-    for path in sorted(folder.iterdir()):
+    for path in paths:
         if path.name.endswith(".md") and path.is_file():
             try:
                 files[path.name] = path.read_bytes().decode("utf-8-sig")
@@ -79,8 +84,7 @@ def _check_frontmatter(name, lines):
         if not value:
             found.append(finding(f"key:{name}:{key}", "frontmatter", f"{key} is missing or empty", name, number))
         elif key in VALUE_RULES and not VALUE_RULES[key][0](value):
-            rule = key.replace("_", "-")
-            found.append(finding(f"{rule}:{name}", "frontmatter", f"{key} is not {VALUE_RULES[key][1]}", name, number))
+            found.append(finding(f"{key.replace('_', '-')}:{name}", "frontmatter", f"{key} is not {VALUE_RULES[key][1]}", name, number))
     return found, end + 1
 
 
@@ -89,12 +93,15 @@ def _check_body(name, lines, start):
     facts = []
     last = -1
     section = item = None
-    fenced = False
+    fence = None
     for number, line in enumerate(lines[start:], start + 1):
-        if line.lstrip().startswith(("```", "~~~")):
-            fenced = not fenced
-        elif fenced:
-            continue
+        opening = FENCE.match(line)
+        if fence:
+            closing = line.strip()
+            if len(closing) >= len(fence) and closing == fence[0] * len(closing):
+                fence = None
+        elif opening:
+            fence = opening[1]
         elif line.startswith("## "):
             section = line[3:].strip()
             item = None
@@ -155,7 +162,7 @@ def check_index(text, pages):
 
 def check_wiki(files):
     if files is None:
-        return [finding("wiki:unread", "read", "WIKI_DIR is not a directory", level="not-run")]
+        return [finding("wiki:unread", "read", "WIKI_DIR is not a directory that can be read", level="not-run")]
     found = [
         finding(f"unread:{name}", "read", f"{name} cannot be read as UTF-8", name, level="not-run")
         for name, text in files.items() if text is None
@@ -182,7 +189,7 @@ def main(argv):
     else:
         for f in found:
             where = f"{f['file']}:{f['line']}  " if f["file"] else ""
-            print(f"{f['level']:9} {f['id']}  {where}{f['detail']}")
+            print(f"{f['level']:9} {f['id']}  {where}{f['detail']}".encode("ascii", "backslashreplace").decode())
         print(f"{len(found)} finding(s), {len(blocking)} fail")
     return 1 if blocking else 0
 
