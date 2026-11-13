@@ -28,22 +28,20 @@ DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 SHA = re.compile(r"[0-9a-fA-F]{7,40}")
 TAG = "standards|architecture|library|gotcha|decision"
 TAG_LIST = re.compile(rf"\[\s*(?:{TAG})(?:\s*,\s*(?:{TAG}))*\s*\]")
-FENCE = re.compile(r"\s*(`{3,}(?!.*`)|~{3,})")
+FENCE = re.compile(r" {0,3}(`{3,}(?!.*`)|~{3,})")
 CITATION = re.compile(r"`[^`\s]+:\d+`")
 SECTIONS = ("Summary", "Facts", "Decisions", "Gotchas")
 KEYS = ("title", "updated", "source_commit", "tags")
 
 
 def read_wiki(folder):
-    if not folder.is_dir():
-        return None
     try:
         paths = sorted(folder.iterdir())
     except OSError:
         return None
     files = {}
     for path in paths:
-        if path.name.endswith(".md") and path.is_file():
+        if path.name.lower().endswith(".md"):
             try:
                 files[path.name] = path.read_bytes().decode("utf-8-sig")
             except (OSError, UnicodeDecodeError):
@@ -97,8 +95,7 @@ def _check_body(name, lines, start):
     for number, line in enumerate(lines[start:], start + 1):
         opening = FENCE.match(line)
         if fence:
-            closing = line.strip()
-            if len(closing) >= len(fence) and closing == fence[0] * len(closing):
+            if re.fullmatch(f" {{0,3}}{fence[0]}{{{len(fence)},}}\\s*", line):
                 fence = None
         elif opening:
             fence = opening[1]
@@ -164,7 +161,7 @@ def check_wiki(files):
     if files is None:
         return [finding("wiki:unread", "read", "WIKI_DIR is not a directory that can be read", level="not-run")]
     found = [
-        finding(f"unread:{name}", "read", f"{name} cannot be read as UTF-8", name, level="not-run")
+        finding(f"unread:{name}", "read", f"{name} cannot be read, or is not UTF-8", name, level="not-run")
         for name, text in files.items() if text is None
     ]
     if "index.md" not in files:
