@@ -76,6 +76,7 @@ python tools/sandbox.py <empty-dir>
 | `workflow` | 技能 | 設計、實作、審查、收尾。每個階段都有編號子步驟和輸出範本。 |
 | `wiki` | 技能 | 在 `$WIKI_ROOT/<name>/` 中保存長期專案記憶；未設定 `WIKI_ROOT` 時在 `docs/wiki/`。頁面格式固定。 |
 | `ste` | 技能 | 聊天和檔案的 STE 寫作規則。 |
+| `style` | 技能 | 文件、註解和提交訊息的文法、標點、行文和用詞規則。 |
 | `verify/` | 腳本 | 檢查計畫檔，依計畫檢查變更的 Python 和 JS 程式碼，執行專案自己的檢查工具，並證明每個變更區塊都被某個測試需要。 |
 | `tools/sandbox.py` | 腳本 | 一次性建立可重複使用的試驗沙盒（pytest、jest、Express、React），附故障模擬。 |
 | `SessionStart` | 掛鉤 | 載入規則和 wiki 的 `index.md`。 |
