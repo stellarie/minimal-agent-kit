@@ -1,6 +1,6 @@
 # Diagram style
 
-Start every design diagram with this header. Do not change the colors.
+Start every design diagram from the skeleton: `python $VERIFY/plan_dot.py <plan> --write design.dot`. It has this header. Do not change the colors.
 
 ```
 digraph design {
@@ -22,6 +22,7 @@ Groups use a cluster with this style:
 Rules:
 
 - Do not set `splines=curved` or `splines=ortho`. They misplace edge labels.
+- Keep each slice node name equal to its slice ID. Do not add or remove an edge between two slice nodes. `plan_dot.py --check` fails otherwise.
 - Mark unverified or optional paths with `style=dashed`.
 - Labels are short STE100 noun phrases. Use one term for each thing.
 - Render: `dot -Tpng -Gdpi=150 design.dot -o design.png`.

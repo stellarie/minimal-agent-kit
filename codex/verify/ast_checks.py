@@ -5,6 +5,7 @@ Prints findings as JSON (format in plan.schema.md). Exit 1 when a finding has le
 Checks: files outside every slice, eta, effect calls not in the slice, imports from a slice not in
 `depends`, functions and module-level code without a
 pseudocode `done` location (phase 2 and later), and public interface changes not in the slice.
+A slice with `small` that adds more than 20 lines outside its test files gets `small:` (phase 2 and later).
 Once per run, it also builds the import graph between slices from all Python and JS files in the plan
 and reports each loop that holds the slice of a changed file (`import-cycle:`). A file that fails to
 parse adds no edge. `import-cycle:unread` (level `not-run`) lists such files.
@@ -39,6 +40,7 @@ EFFECTS = re.compile(
 MAYBE = re.compile(r"\.(write|send|query|execute|executemany|commit|remove|post|put|delete|insert|update|emit)$")
 TRIVIAL = re.compile(r"^\s*(#|//|/\*|\*|[\]\)\};,]*\s*$)")
 UNREAD_CAP = 5
+SMALL_LIMIT = 20
 HUNK = re.compile(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@", re.M)
 
 
@@ -274,6 +276,24 @@ def check_import_cycles(plan, root, changed):
     return out
 
 
+def added_lines(root, base, rel):
+    """Added lines of one file since base. A file new since base counts every line."""
+    if base_source(root, base, rel) is None:
+        path = root / rel
+        return len(path.read_text(encoding="utf-8", errors="replace").splitlines()) if path.is_file() else 0
+    row = git(root, "diff", "--numstat", base, "--", rel).stdout.split("\t")[0]
+    return int(row) if row.isdigit() else 0
+
+
+def check_small(plan, root, base):
+    """A `small` slice may add at most SMALL_LIMIT lines outside its test files."""
+    out = []
+    for s in plan.get("slices", []):
+        if s.get("small") and sum(added_lines(root, base, f) for f in s.get("files", []) if not verify_plan.is_test_path(f)) > SMALL_LIMIT:
+            out.append(finding(f"small:{s['id']}", "lazy", f"small slice adds more than {SMALL_LIMIT} lines outside test files"))
+    return out
+
+
 def run(plan, root, base, phase, files=None):
     out = []
     code = []
@@ -281,7 +301,7 @@ def run(plan, root, base, phase, files=None):
         if pathlib.Path(rel).suffix in PY | JS:
             code.append(rel.replace("\\", "/"))
             out += check_file(plan, root, base, code[-1], phase)
-    return out + check_import_cycles(plan, root, code)
+    return out + check_import_cycles(plan, root, code) + (check_small(plan, root, base) if phase >= 2 else [])
 
 
 def main(argv):

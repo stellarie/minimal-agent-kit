@@ -1,6 +1,6 @@
 """Check the structure of a plan file and merge findings from other checks.
 
-Usage: python verify_plan.py PLAN [--root DIR] [--phase 1|2|3] [--findings FILE ...]
+Usage: python verify_plan.py PLAN [--root DIR] [--phase 1|2|3] [--findings FILE ...] [--pin]
 Exit 1 when a finding has level "fail" and its ID is not in "accepted".
 The format is in plan.schema.md.
 Checks: schema types, references, input sources, parts without acceptance items and the reverse,
@@ -8,7 +8,8 @@ link justifications, claim strength, confluence, and the slice graph:
 dependency loops, unknown `depends`, duplicate IDs, one file in two slices, parallel slices that depend
 on each other or list each other on one side only, slice order, and outputs that no slice reads.
 Phase 2 adds `done` locations, scenario tests, and claim evidence: a `tested` claim cites a test file,
-a `proved` claim cites something. Last, "accepted" IDs that match no finding are noted as stale.
+a `proved` claim cites something. Pins (`unpinned`, `moved`, `drift`), claim structure, loop measures,
+and composition rows are checked too. `--pin` writes new pins and moves pinned references, then checks. Last, "accepted" IDs that match no finding are noted as stale.
 """
 
 import argparse
@@ -19,6 +20,8 @@ import re
 import sys
 
 STRENGTHS = {"proved", "tested", "assumed"}
+TECHNIQUES = {"case", "induction", "contradiction", "chaining"}
+LOOP = re.compile(r"\s*(?:for|while|loop|repeat|recurse)\b", re.I)
 REF = re.compile(r"^(?P<file>(?:[A-Za-z]:)?[^:\s]+):(?P<line>\d+)$")
 REFS = re.compile(r"(?<![\w/])(?:[A-Za-z]:[\\/])?[^\s,;():]+:\d+")
 URL = re.compile(r"\w+://\S+")
@@ -30,9 +33,9 @@ SLICE_SOURCE = re.compile(r"^(S\d+)\.(\w+)$")
 SKIP_DIRS = {"node_modules", ".git", ".venv", "venv", "dist", "build", "site-packages", "__pycache__"}
 TEXT_FIELDS = {
     "parts": ["acceptance"], "composition": ["justification", "statement"], "inputs": ["source"],
-    "claims": ["evidence", "strength"], "pseudocode": ["done", "text"],
+    "claims": ["evidence", "strength", "technique"], "pseudocode": ["done", "text", "measure"],
 }
-LIST_FIELDS = {"slices": ["scenarios", "depends", "parallel", "files", "calls", "interface", "outputs"]}
+LIST_FIELDS = {"composition": ["uses"], "slices": ["scenarios", "depends", "parallel", "files", "calls", "interface", "outputs"]}
 REQUIRED = {"slices": ["id"], "claims": ["id"], "inputs": ["field"], "pseudocode": ["line"], "composition": ["id"], "parts": ["name"]}
 
 
@@ -62,6 +65,9 @@ def check_keys(plan, root):
         value = plan.get(key, [])
         if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
             out.append(finding(f"schema:{key}", "schema", f"{key!r} must be a list of text"))
+    pins = plan.get("pins", {})
+    if not isinstance(pins, dict) or not all(isinstance(v, str) for v in pins.values()):
+        out.append(finding("schema:pins", "schema", "'pins' must be an object with text values"))
     for key in ("parts", "composition", "slices"):
         if not isinstance(plan.get(key, []), list):
             out.append(finding(f"schema:{key}", "schema", f"{key!r} must be a list"))
@@ -84,6 +90,14 @@ def check_keys(plan, root):
                 value = item.get(key, [])
                 if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
                     out.append(finding(f"schema:{kind}[{n}].{key}", "schema", f"{key!r} must be a list of text"))
+            if kind == "claims":
+                lines, cases = item.get("lines", []), item.get("cases", [])
+                if not isinstance(lines, list) or not all(isinstance(v, int) and not isinstance(v, bool) for v in lines):
+                    out.append(finding(f"schema:claims[{n}].lines", "schema", "'lines' must be a list of numbers"))
+                if not isinstance(cases, list) or not all(
+                    isinstance(v, dict) and isinstance(v.get("name", ""), str) and isinstance(v.get("test", ""), str) for v in cases
+                ):
+                    out.append(finding(f"schema:claims[{n}].cases", "schema", "'cases' must be a list of objects with text 'name' and 'test'"))
             if kind == "slices":
                 effects = item.get("effects", {})
                 ok = isinstance(effects, dict) and all(
@@ -117,19 +131,90 @@ def refs_in(plan, phase):
     return refs
 
 
+def split_refs(text):
+    """Return (pytest node IDs, `file:line` refs) of a text. URLs are skipped."""
+    text = URL.sub(" ", text or "")
+    return list(NODE_REF.finditer(text)), REFS.findall(NODE_REF.sub(" ", text))
+
+
+def plan_refs(plan, phase):
+    """Return (owner, ref) for each `file:line` in the reference fields."""
+    return [(owner, ref) for owner, text, _ in refs_in(plan, phase) for ref in split_refs(text)[1]]
+
+
 def check_refs(plan, root, phase=1):
     out = []
     for owner, text, is_evidence in refs_in(plan, phase):
-        text = URL.sub(" ", text or "")
-        for node in NODE_REF.finditer(text) if is_evidence else ():
+        nodes, files = split_refs(text)
+        for node in nodes if is_evidence else ():
             if not (root / node[1]).is_file():
                 out.append(finding(f"ref:{owner}:{node[0]}", "ref", f"{node[1]} does not exist", node[1]))
-        for ref in REFS.findall(NODE_REF.sub(" ", text)):
+        for ref in files:
             err = ref_error(root, ref)
             if err:
                 file, line = ref.rsplit(":", 1)
                 out.append(finding(f"ref:{owner}:{ref}", "ref", err, file, int(line)))
     return out
+
+
+def pin_status(plan, root, phase):
+    """Map each resolving ref to (state, text): unpinned, moved (new ref), or drift."""
+    pins = plan.get("pins", {})
+    out = {}
+    for _, ref in plan_refs(plan, phase):
+        m = REF.match(ref)
+        if ref in out or not m or ref_error(root, ref):
+            continue
+        lines = [l.strip() for l in (root / m["file"]).read_text(encoding="utf-8", errors="replace").splitlines()]
+        here = lines[int(m["line"]) - 1]
+        if ref not in pins:
+            out[ref] = ("unpinned", here)
+        elif pins[ref] != here:
+            other = [n for n, l in enumerate(lines, 1) if l == pins[ref]]
+            out[ref] = ("moved", f"{m['file']}:{other[0]}") if len(other) == 1 else ("drift", "")
+    return out
+
+
+def check_pins(plan, root, phase=1):
+    out = []
+    for ref, (state, new) in pin_status(plan, root, phase).items():
+        file, line = ref.rsplit(":", 1)
+        detail = {
+            "unpinned": "reference has no pin; run --pin",
+            "moved": f"pinned text is now at {new}; run --pin",
+            "drift": "pinned text is not in the file, or is on more than one other line",
+        }[state]
+        out.append(finding(f"{state}:{ref}", "pin", detail, file, int(line)))
+    return out
+
+
+MOVABLE = re.compile("|".join(r.pattern for r in (URL, NODE_REF, REFS)))
+
+
+def pin_plan(plan, root, phase):
+    """Add pins for unpinned refs and move pinned refs. Return the report lines."""
+    status = pin_status(plan, root, phase)
+    moves = {r: new for r, (state, new) in status.items() if state == "moved"}
+    swap = lambda text: MOVABLE.sub(lambda m: moves.get(m[0], m[0]), text)
+    for k in plan.get("composition", []):
+        k["justification"] = swap(k.get("justification", ""))
+    for s in plan.get("slices", []):
+        for i in s.get("inputs", []):
+            i["source"] = swap(i.get("source", ""))
+        for c in s.get("claims", []):
+            c["evidence"] = swap(c.get("evidence", ""))
+        for p in s.get("pseudocode", []):
+            p["done"] = swap(p.get("done", ""))
+    pins = {moves.get(k, k): v for k, v in plan.get("pins", {}).items()}
+    report = []
+    for ref, (state, new) in status.items():
+        if state == "unpinned":
+            pins[ref] = new
+            report.append(f"new {ref}")
+        elif state == "moved":
+            report.append(f"moved {ref} -> {new}")
+    plan["pins"] = pins
+    return report
 
 
 def check_sources(plan, root):
@@ -406,6 +491,85 @@ def check_evidence(plan, root):
     return unique(out)
 
 
+def all_claims(plan):
+    return [(s, c) for s in plan.get("slices", []) for c in s.get("claims", [])]
+
+
+def check_technique(plan, root):
+    return [
+        finding(f"technique:{c['id']}", "claim", f"proved claim has technique {c.get('technique')!r}")
+        for _, c in all_claims(plan)
+        if c.get("strength") == "proved" and c.get("technique") not in TECHNIQUES
+    ]
+
+
+def check_claim_lines(plan, root):
+    out = []
+    for s, c in all_claims(plan):
+        have = {str(p["line"]) for p in s.get("pseudocode", [])}
+        lines = c.get("lines", [])
+        if (not lines and c.get("strength") != "assumed") or any(str(n) not in have for n in lines):
+            out.append(finding(f"claim-lines:{c['id']}", "claim", "lines is empty or names a pseudocode line that does not exist"))
+    return out
+
+
+def check_cases(plan, root):
+    return [
+        finding(f"cases:{c['id']}", "claim", "technique is case and there are no cases")
+        for _, c in all_claims(plan)
+        if c.get("technique") == "case" and not c.get("cases")
+    ]
+
+
+def check_case_tests(plan, root):
+    names = set(test_names(root))
+    return [
+        finding(f"case-test:{c['id']}.{case.get('name', '')}", "claim", "case names no test, or no test has that name")
+        for _, c in all_claims(plan)
+        for case in c.get("cases", [])
+        if case.get("test", "") not in names
+    ]
+
+
+def check_claim_tests(plan, root):
+    names = test_names(root)
+    out = []
+    for _, c in all_claims(plan):
+        key = re.sub(r"\W", "_", str(c["id"]))
+        if c.get("strength") == "tested" and not any(re.search(re.escape(key) + r"(?!\d)", n, re.I) for n in names):
+            out.append(finding(f"claim-test:{c['id']}", "claim", f"no test name contains {key.lower()}"))
+    return out
+
+
+def check_measure(plan, root):
+    return [
+        finding(f"measure:{s['id']}.line{p['line']}", "loop", "loop line has no measure")
+        for s in plan.get("slices", [])
+        for p in s.get("pseudocode", [])
+        if LOOP.match(p.get("text", "")) and not p.get("measure", "").strip()
+    ]
+
+
+def check_rows(plan, root):
+    n = len(plan.get("slices", []))
+    have = {str(k["id"]) for k in plan.get("composition", [])}
+    need = [f"K{i}" for i in range(n)] + ["Kinv", "Kg"] if n else []
+    return [finding(f"composition-missing:{k}", "composition", f"composition row {k} does not exist") for k in need if k not in have]
+
+
+def check_uses(plan, root):
+    claims = {str(c["id"]): s for s, c in all_claims(plan)}
+    strength = {str(c["id"]): c.get("strength") for _, c in all_claims(plan)}
+    out = []
+    for k in plan.get("composition", []):
+        for cid in k.get("uses", []):
+            if cid not in claims:
+                out.append(finding(f"uses:{k['id']}-{cid}", "composition", f"{cid} is not a claim"))
+            elif strength[cid] == "tested" and not claims[cid].get("small"):
+                out.append(finding(f"strength-low:{cid}", "composition", f"{k['id']} relies on a tested claim"))
+    return unique(out)
+
+
 def check_stale(plan, found):
     seen = {f["id"] for f in found} | {str(c["id"]) for s in plan.get("slices", []) for c in s.get("claims", [])}
     return [
@@ -419,9 +583,10 @@ RULES = {
     1: [
         check_keys, check_refs, check_sources, check_lazy, check_composition, check_strength, check_confluence,
         check_cycles, check_unknown_depends, check_duplicates, check_owners, check_parallel_depends,
-        check_parallel_pair, check_order, check_unused, check_uncovered,
+        check_parallel_pair, check_order, check_unused, check_uncovered, check_pins, check_technique, check_claim_lines,
+        check_cases, check_measure, check_rows, check_uses,
     ],
-    2: [check_done, check_scenarios, check_evidence],
+    2: [check_done, check_scenarios, check_evidence, check_case_tests, check_claim_tests],
 }
 
 
@@ -434,7 +599,7 @@ def verify(plan, root, phase, extra=()):
             for rule in RULES[level]:
                 if rule is check_keys:
                     continue
-                found += rule(plan, root, phase) if rule is check_refs else rule(plan, root)
+                found += rule(plan, root, phase) if rule in (check_refs, check_pins) else rule(plan, root)
     found += list(extra)
     found += check_stale(plan, found)
     accepted = set(plan.get("accepted", []))
@@ -449,8 +614,14 @@ def main(argv):
     parser.add_argument("--phase", type=int, choices=(1, 2, 3), default=1)
     parser.add_argument("--findings", type=pathlib.Path, nargs="*", default=[])
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--pin", action="store_true")
     args = parser.parse_args(argv)
     plan = load_json(args.plan)
+    if args.pin and not check_keys(plan, args.root):
+        report = pin_plan(plan, args.root.resolve(), args.phase)
+        args.plan.write_text(json.dumps(plan, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+        for line in report:
+            print(line, file=sys.stderr if args.json else sys.stdout)
     extra = [f for path in args.findings for f in load_json(path)]
     found, blocking = verify(plan, args.root.resolve(), args.phase, extra)
     if args.json:

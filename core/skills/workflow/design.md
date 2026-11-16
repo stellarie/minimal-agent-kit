@@ -62,10 +62,12 @@ Read `slicing.md`. Slice the work before you design the parts.
 7. Order the slices: dependencies first, then the riskiest.
 8. Mark slices that can run in parallel. Check them with `confluence`, not only by shared files.
 9. Write the composition table: from the current system, through each slice, to the Goal. Check each link with `signature`.
+   Add the rows `K0` to `K<n-1>`, `Kinv`, and `Kg`.
+10. Write the plan file next to the design file (`$VERIFY/plan.schema.md`), with the slices and the composition rows. Claims come in 1.7.
 
 ## 1.6 Architect
 
-1. Write a Graphviz file in the style from `diagram.md`.
+1. Write the skeleton: `python $VERIFY/plan_dot.py <plan> --write design.dot`. Add to it in the style from `diagram.md`.
 2. Show components, data flow, and the boundary of the change. Show the slice for each part.
 3. Mark new parts, changed parts, and reused parts. Use a legend.
 4. Render it to PNG. Check the PNG for overlap before you present it.
@@ -83,8 +85,12 @@ Read `proof.md`. Check the plan before any code exists.
 7. For a small slice, use the small-slice rule in `proof.md`.
 8. Set the required strength of each claim with `calculus.md` `lazy` step 2.
 9. Fill the calculus checks table (`calculus.md` Output). For steps that need code, record what you planned (`calculus.md`).
-10. Write the plan file next to the design file (`$VERIFY/plan.schema.md`). Run `verify_plan.py <plan> --phase 1`.
-    Fix each fail, or list it for the human to accept by ID.
+10. Add the claims, `lines`, and `measure` fields to the plan file. Run the checks:
+    ```
+    python $VERIFY/plan_dot.py <plan> --check design.dot > dot.json
+    python $VERIFY/verify_plan.py <plan> --phase 1 --pin --findings dot.json
+    ```
+    Fix each fail, or list it for the human to accept by ID. Keep the pin report for the review.
 
 ## 1.8 Spike
 

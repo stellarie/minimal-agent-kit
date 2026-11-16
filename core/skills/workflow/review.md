@@ -15,13 +15,17 @@ Give the subagent only these inputs:
 - the design file and its scenarios
 - this file, `proof.md`, `slicing.md`, and `calculus.md`
 - the plan file, and the output of the scripts in 3.4 step 6
+- the pin report (`--pin` output) since the last round
 
 Do not give it your conclusions. A fresh reader does not share your assumptions.
 
 The subagent reviews by refutation. For each claim and composition link in the obligation table (`proof.md`):
 
 1. Try to build a counterexample: an input, a state, or a call order that makes the claim false.
-2. Check each `file:line` in the argument against the code at the head commit.
+2. Check each `file:line` in the argument against the code at the head commit. Pins show only that a line did not change.
+   - Round 1: check each reference.
+   - Later rounds: check only the references in the pin report since the last round, and those with a `moved` or `drift` finding.
+   - A `file:line` only in design-file prose has no pin. Check it each round.
 3. Check that the strength is honest. A `proved` row with a gap is `tested` at best.
 4. Report each row: holds, broken with the counterexample, or weaker than stated.
 
@@ -79,7 +83,9 @@ Exercise the real flow, not only the tests:
    python $VERIFY/ast_checks.py <plan> --base <base> --phase 3 > ast.json
    python $VERIFY/check_tools.py --base <base> > tools.json
    python $VERIFY/minimal_check.py --base <base> --test "<test command>" > minimal.json
-   python $VERIFY/verify_plan.py <plan> --phase 3 --findings ast.json tools.json minimal.json
+   python $VERIFY/plan_dot.py <plan> --check design.dot > dot.json
+   python $VERIFY/prop_checks.py <plan> > prop.json
+   python $VERIFY/verify_plan.py <plan> --phase 3 --findings ast.json tools.json minimal.json dot.json prop.json
    ```
    The exit code of `verify_plan.py` is the gate. Report each "consider" and "not-run" line as a note to the human.
    A `minimal:` fail is a hunk the tests do not need. Remove it, add a test that needs it, or ask the human to accept its ID.
