@@ -27,8 +27,10 @@ Scripts in `$VERIFY` (`SKILL.md`) run these steps. A script result is evidence. 
 
 | Script | Steps |
 |---|---|
-| `verify_plan.py` | signature 1 to 3 and the dependency graph (loops, unknown `depends`, duplicate IDs, slice order, unused outputs), lazy 1 (parts and acceptance items), confluence 1 and 2 (shared files, one-sided or dependent `parallel`), the `done` part of reduction, claim evidence, the K row justifications |
+| `verify_plan.py` | signature 1 to 3 and the dependency graph (loops, unknown `depends`, duplicate IDs, slice order, unused outputs), lazy 1 (parts and acceptance items), confluence 1 and 2 (shared files, one-sided or dependent `parallel`), the `done` part of reduction, claim evidence, the K row justifications, the proof fields of each claim (`technique`, `lines`, `cases`), loop `measure` (termination), the K rows and `uses`, reference pins |
 | `ast_checks.py` | pure-slice 3, signature 4 for public symbols, imports between slices against `depends`, import loops between slices, the code-path part of reduction for functions and module-level code, eta 2 |
+| `plan_dot.py` | The diagram has each slice node and each `depends` edge, and no other edge between slice nodes |
+| `prop_checks.py` | lazy and proof: a property test with a fixed seed for each `tested` claim, when the project has the library |
 | `check_tools.py` | the project's linters, type checkers, coverage, and mutation tools |
 | `minimal_check.py` | lazy, on the code: each changed hunk is needed by a test (1-minimal) |
 

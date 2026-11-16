@@ -29,6 +29,17 @@ Rules:
 
 ## Techniques
 
+Write each claim in the plan file (`$VERIFY/plan.schema.md`) with its `technique` and `lines` (the pseudocode lines it covers). The fields per technique:
+
+| Technique | Plan fields |
+|---|---|
+| case analysis | `"technique": "case"`, and `cases`: one `{"name", "test"}` for each class. `test` is the exact test name. |
+| induction | `"technique": "induction"`. Each loop line of `lines` has a `measure` in the pseudocode. |
+| contradiction | `"technique": "contradiction"` |
+| contract chaining | `"technique": "chaining"`. A composition row lists the claims it relies on in `uses`. |
+
+A row in `uses` needs a `proved` claim, unless the claim is in a `small` slice.
+
 ### Case analysis
 
 Use it when the input falls into classes.
@@ -104,6 +115,11 @@ For a composition link, write the justification in the Composition table only. H
 
 - Name each test after its claim, for example `test_c2_1_parse_empty_raises`.
 - Cover each case from a case analysis with at least one test.
-- Prefer a property-based test (Hypothesis, fast-check) for a claim about all inputs, when the project has the library.
+- A `tested` claim with no `cases` needs a property test when the project names Hypothesis or fast-check. Fix its seed. `prop_checks.py` checks this.
 - Each test that this change adds names a claim or a scenario. Do not delete existing project tests for this rule.
 - Check that each test can fail: break the code for a moment, see the test fail, then restore the code.
+
+## References and pins
+
+The plan file pins each `file:line` reference to the text of that line. Run `verify_plan.py <plan> --pin` to add pins and to follow a moved line.
+To clear a real `drift`: correct the reference by hand, delete its old pin, and run `--pin`. The new pin appears in the pin report.

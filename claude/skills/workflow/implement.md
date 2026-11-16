@@ -31,7 +31,7 @@ Do these steps for each slice, in plan order:
 5. **Run.** Run the slice tests, then the affected suite. All pass.
 6. **Discharge.** For each claim of the slice, check the argument from the design against the real code. Update each `file:line`. If the argument fails, stop (2.4).
    - Run `calculus.md` `pure-slice`, `signature`, `reduction`, and the code steps of `termination`.
-   - Fill the `done` locations in the plan file. Run `ast_checks.py <plan> --base <base>`.
+   - Fill the `done` locations in the plan file. Run `ast_checks.py <plan> --base <base>`, `prop_checks.py <plan>`, and `verify_plan.py <plan> --phase 2 --pin`.
    - Fix each fail before you commit.
 7. **Refactor.** Reduce to normal form (`calculus.md` `normal-form`). Do not refactor code outside the slice.
 8. **Clean.** Remove debug output, commented code, unused imports, and comments that say what. Use the linter if the project has one. Update docs your change made false.

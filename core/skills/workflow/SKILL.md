@@ -40,8 +40,10 @@ Guiding question for every phase: what is the minimal amount of code and impact 
 
 | Script | Checks |
 |---|---|
-| `verify_plan.py PLAN --phase N` | Plan structure, slice graph, and claim evidence. Merges the other findings. Its exit code is a gate. |
+| `verify_plan.py PLAN --phase N [--pin]` | Plan structure, slice graph, claim evidence and structure, and reference pins (`--pin` writes them). Merges the other findings. Its exit code is a gate. |
 | `ast_checks.py PLAN --base REV` | Changed Python and JS code against the plan: files, `eta`, effects, imports against `depends`, import loops between slices, `done` lines, public interface |
+| `plan_dot.py PLAN --write FILE`, `--check FILE` | Writes the diagram skeleton from the slice graph. Checks that the diagram keeps each slice node and each `depends` edge. |
+| `prop_checks.py PLAN` | A property test with a fixed seed for each `tested` claim, when the project names Hypothesis or fast-check |
 | `check_tools.py --base REV` | The check tools the project has configured. A missing tool is a note, not a fail. |
 | `minimal_check.py --base REV --test CMD` | Undoes each changed hunk alone in a temporary worktree. A test must fail, or the hunk is not needed. |
 
