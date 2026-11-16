@@ -1,6 +1,8 @@
 """Tests for verify_plan.py: each rule finds its broken case (C1.1), a valid plan passes (C1.2)."""
 
+import contextlib
 import copy
+import io
 import json
 import sys
 import tempfile
@@ -14,14 +16,22 @@ VALID = {
     "goal": "g",
     "acceptance": ["A1"],
     "parts": [{"name": "p", "acceptance": "A1"}],
+    "pins": {"a.py:1": "x = 1", "a.py:2": "y = 2", "tests/test_a.py:1": "def test_SC1(): pass"},
     "slices": [
         {
             "id": "S1", "files": ["a.py"], "depends": [], "parallel": ["S2"],
             "inputs": [{"field": "x", "source": "a.py:1"}], "outputs": ["y"],
             "effects": {"reads": [], "writes": ["out/a.json"]},
             "scenarios": ["SC1"],
-            "claims": [{"id": "C1.1", "strength": "tested", "evidence": "tests/test_a.py:1"}],
-            "pseudocode": [{"line": 1, "text": "y = f(x)", "done": "a.py:2"}],
+            "claims": [
+                {"id": "C1.1", "strength": "tested", "evidence": "tests/test_a.py:1", "lines": [1]},
+                {"id": "C1.2", "strength": "proved", "evidence": "a.py:2", "technique": "case", "lines": [1, 2],
+                 "cases": [{"name": "empty", "test": "test_c1_2_empty"}]},
+            ],
+            "pseudocode": [
+                {"line": 1, "text": "y = f(x)", "done": "a.py:2"},
+                {"line": 2, "text": "for r in rows: add(r)", "measure": "rows left", "done": "a.py:2"},
+            ],
         },
         {
             "id": "S2", "files": ["b.py"], "depends": [], "parallel": ["S1"],
@@ -34,9 +44,18 @@ VALID = {
             "effects": {"reads": [], "writes": []}, "scenarios": [], "claims": [], "pseudocode": [],
         },
     ],
-    "composition": [{"id": "K0", "statement": "s", "justification": "a.py:1"}],
+    "composition": [
+        {"id": "K0", "statement": "s", "justification": "a.py:1"},
+        {"id": "K1", "statement": "s", "justification": "S1 output feeds S2", "uses": ["C1.2"]},
+        {"id": "K2", "statement": "s", "justification": "S2 output feeds S3"},
+        {"id": "Kinv", "statement": "s", "justification": "invariant holds"},
+        {"id": "Kg", "statement": "s", "justification": "goal holds"},
+    ],
     "accepted": [],
 }
+
+
+TEST_A = "def test_SC1(): pass\ndef test_c1_1_ok(): pass\ndef test_c1_2_empty(): pass\n"
 
 
 class VerifyPlanTests(unittest.TestCase):
@@ -45,7 +64,7 @@ class VerifyPlanTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         (self.root / "a.py").write_text("x = 1\ny = 2\n")
         (self.root / "tests").mkdir()
-        (self.root / "tests" / "test_a.py").write_text("def test_SC1(): pass\n")
+        (self.root / "tests" / "test_a.py").write_text(TEST_A)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -273,7 +292,7 @@ class GraphTests(VerifyPlanTests):
         p["slices"][1]["id"] = "S1"
         p["slices"][1]["parallel"] = []
         p["slices"][0]["parallel"] = []
-        p["slices"][1]["claims"] = [{"id": "C1.1", "strength": "tested", "evidence": "tests/test_a.py:1"}]
+        p["slices"][1]["claims"] = [{"id": "C1.1", "strength": "tested", "evidence": "tests/test_a.py:1", "lines": []}]
         ids = self.ids(p)
         self.assertIn("duplicate:slice:S1", ids)
         self.assertIn("duplicate:claim:C1.1", ids)
@@ -325,7 +344,7 @@ class GraphTests(VerifyPlanTests):
 
     def test_proved_claim_needs_evidence(self):
         p = self.broken()
-        p["slices"][0]["claims"][0].update(strength="proved", evidence=" ")
+        p["slices"][0]["claims"][0].update(strength="proved", evidence=" ", technique="induction")
         self.assertIn("evidence:C1.1", self.ids(p, phase=2))
         p["slices"][0]["claims"][0]["evidence"] = "induction on len(rows), a.py:1"
         self.assertEqual(set(), self.ids(p, phase=2))
@@ -444,6 +463,144 @@ class GraphTests(VerifyPlanTests):
         ids = self.ids(p)
         self.assertIn("owner:a.py", ids)
         self.assertIn("owner:sub/d.py", ids)
+
+
+class StructuredProofTests(VerifyPlanTests):
+    def mutated(self, fid, change, phase=2):
+        p = self.broken()
+        change(p)
+        self.assertIn(fid, self.ids(p, phase), fid)
+
+    def test_pin_findings(self):
+        self.mutated("unpinned:a.py:1", lambda p: p["pins"].pop("a.py:1"))
+        (self.root / "a.py").write_text("# top\nx = 1\ny = 2\n")
+        found, _ = verify_plan.verify(VALID, self.root, 2)
+        by_id = {f["id"]: f for f in found}
+        self.assertIn("a.py:2", by_id["moved:a.py:1"]["detail"])
+        self.assertIn("moved:a.py:2", by_id)
+        (self.root / "a.py").write_text("x = 100\ny = 2\n")
+        self.assertIn("drift:a.py:1", self.ids(VALID))
+        (self.root / "a.py").write_text("q\nx = 1\nx = 1\ny = 2\n")
+        self.assertIn("drift:a.py:1", self.ids(VALID))
+
+    def test_pin_skips_refs_that_do_not_resolve(self):
+        p = self.broken()
+        p["composition"][0]["justification"] = "a.py:99 and gone.py:1"
+        ids = self.ids(p)
+        self.assertIn("ref:K0:a.py:99", ids)
+        self.assertNotIn("unpinned:a.py:99", ids)
+        self.assertNotIn("unpinned:gone.py:1", ids)
+
+    def test_technique(self):
+        self.mutated("technique:C1.2", lambda p: p["slices"][0]["claims"][1].pop("technique"), 1)
+        self.mutated("technique:C1.2", lambda p: p["slices"][0]["claims"][1].update(technique="magic"), 1)
+
+    def test_claim_lines(self):
+        self.mutated("claim-lines:C1.1", lambda p: p["slices"][0]["claims"][0].update(lines=[]), 1)
+        self.mutated("claim-lines:C1.1", lambda p: p["slices"][0]["claims"][0].update(lines=[9]), 1)
+        p = self.broken()
+        p["slices"][0]["claims"][0].update(strength="assumed", lines=[])
+        self.assertNotIn("claim-lines:C1.1", self.ids(p, 1))
+
+    def test_cases(self):
+        self.mutated("cases:C1.2", lambda p: p["slices"][0]["claims"][1].update(cases=[]), 1)
+
+    def test_case_test(self):
+        self.mutated("case-test:C1.2.empty", lambda p: p["slices"][0]["claims"][1]["cases"][0].update(test=""))
+        self.mutated("case-test:C1.2.empty", lambda p: p["slices"][0]["claims"][1]["cases"][0].update(test="test_nope"))
+        p = self.broken()
+        p["slices"][0]["claims"][1]["cases"][0]["test"] = "test_nope"
+        self.assertNotIn("case-test:C1.2.empty", self.ids(p, 1))
+
+    def test_claim_test(self):
+        (self.root / "tests" / "test_a.py").write_text("def test_SC1(): pass\ndef test_c1_10_ok(): pass\n")
+        self.assertIn("claim-test:C1.1", self.ids(VALID))
+        (self.root / "tests" / "test_a.py").write_text("def test_SC1(): pass\ndef test_C1_1_Upper(): pass\ndef test_c1_2_empty(): pass\n")
+        self.assertNotIn("claim-test:C1.1", self.ids(VALID))
+
+    def test_loop_measure(self):
+        for word in ("for", "while", "loop", "repeat", "recurse"):
+            p = self.broken()
+            p["slices"][0]["pseudocode"][1].update(text="  " + word + " x", measure=" ")
+            self.assertIn("measure:S1.line2", self.ids(p, 1), word)
+        p = self.broken()
+        p["slices"][0]["pseudocode"][1].update(text="format x", measure="")
+        self.assertNotIn("measure:S1.line2", self.ids(p, 1))
+
+    def test_composition_rows(self):
+        for gone in ("K0", "K1", "K2", "Kinv", "Kg"):
+            self.mutated(f"composition-missing:{gone}", lambda p: p["composition"].remove(next(k for k in p["composition"] if k["id"] == gone)), 1)
+        p = self.broken()
+        p["slices"], p["composition"], p["parts"] = [], [], []
+        self.assertEqual(set(), {i for i in self.ids(p, 1) if i.startswith("composition-missing")})
+
+    def test_uses_unknown_claim(self):
+        self.mutated("uses:K1-C9.9", lambda p: p["composition"][1].update(uses=["C9.9"]), 1)
+
+    def test_strength_low(self):
+        self.mutated("strength-low:C1.1", lambda p: p["composition"][1].update(uses=["C1.1"]), 1)
+        p = self.broken()
+        p["composition"][1]["uses"] = ["C1.1"]
+        p["slices"][0]["small"] = True
+        self.assertNotIn("strength-low:C1.1", self.ids(p, 1))
+        p = self.broken()
+        p["composition"][1]["uses"] = ["C1.1"]
+        p["slices"][0]["claims"][0]["strength"] = "assumed"
+        ids = self.ids(p, 1)
+        self.assertIn("assumed:C1.1", ids)
+        self.assertNotIn("strength-low:C1.1", ids)
+
+    def test_new_field_types(self):
+        for fid, change in (
+            ("schema:pins", lambda p: p.update(pins=["a.py:1"])),
+            ("schema:pins", lambda p: p["pins"].update({"a.py:1": 5})),
+            ("schema:claims[0].lines", lambda p: p["slices"][0]["claims"][0].update(lines="1")),
+            ("schema:claims[1].cases", lambda p: p["slices"][0]["claims"][1].update(cases=["x"])),
+            ("schema:claims[1].technique", lambda p: p["slices"][0]["claims"][1].update(technique=3)),
+            ("schema:pseudocode[1].measure", lambda p: p["slices"][0]["pseudocode"][1].update(measure=3)),
+            ("schema:composition[1].uses", lambda p: p["composition"][1].update(uses="C1.2")),
+        ):
+            self.mutated(fid, change, 1)
+
+    def test_pin_round_trip(self):
+        plan = self.broken()
+        del plan["pins"]
+        path = self.root / "plan.json"
+        path.write_text(json.dumps(plan))
+        argv = [str(path), "--root", str(self.root), "--phase", "2"]
+
+        def run(*extra):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = verify_plan.main(argv + list(extra))
+            return code, out.getvalue()
+
+        code, _ = run()
+        self.assertEqual(1, code)
+        code, out = run("--pin")
+        self.assertEqual(0, code)
+        self.assertIn("new a.py:1", out)
+        self.assertEqual("x = 1", json.loads(path.read_text())["pins"]["a.py:1"])
+        self.assertEqual(0, run()[0])
+        (self.root / "a.py").write_text("# top\nx = 1\ny = 2\n")
+        code, out = run()
+        self.assertEqual(1, code)
+        self.assertIn("moved:a.py:1", out)
+        code, out = run("--pin")
+        self.assertEqual(0, code)
+        self.assertIn("moved a.py:1 -> a.py:2", out)
+        saved = json.loads(path.read_text())
+        self.assertEqual("x = 1", saved["pins"]["a.py:2"])
+        self.assertNotIn("a.py:1", saved["pins"])
+        self.assertEqual("a.py:2", saved["slices"][0]["inputs"][0]["source"])
+        self.assertEqual("a.py:2", saved["composition"][0]["justification"])
+        self.assertEqual("a.py:3", saved["slices"][0]["pseudocode"][0]["done"])
+        self.assertEqual(0, run()[0])
+        (self.root / "a.py").write_text("# top\nx = 100\ny = 2\n")
+        code, out = run("--pin")
+        self.assertEqual(1, code)
+        self.assertIn("drift:a.py:2", out)
+        self.assertEqual(saved["pins"], json.loads(path.read_text())["pins"])
 
 
 if __name__ == "__main__":
