@@ -466,6 +466,45 @@ class AstChecksTests(unittest.TestCase):
         found = {f["id"] for f in ast_checks.run(self.plan, sub, "HEAD", 1)}
         self.assertEqual({"files:my file.py"}, found)
 
+    def small_plan(self, small=True):
+        s = {"id": "S1", "files": ["d.txt", "tests/t.txt", "new.txt"], "calls": [], "interface": [], "pseudocode": []}
+        if small:
+            s["small"] = True
+        self.plan = {"slices": [s]}
+        (self.root / "tests").mkdir(exist_ok=True)
+        self.write("d.txt", "x\n")
+        self.write("tests/t.txt", "x\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "more")
+
+    def test_small_slice_limit(self):
+        self.small_plan()
+        self.write("d.txt", "x\n" + "y\n" * 20)
+        self.assertEqual(set(), self.ids(2))
+        self.write("d.txt", "x\n" + "y\n" * 21)
+        self.assertEqual({"small:S1"}, self.ids(2))
+        self.assertEqual({"small:S1"}, self.ids(3))
+
+    def test_small_slice_counts_untracked_file(self):
+        self.small_plan()
+        self.write("new.txt", "y\n" * 21)
+        self.assertEqual({"small:S1"}, self.ids(2))
+
+    def test_small_slice_skips_test_files(self):
+        self.small_plan()
+        self.write("tests/t.txt", "x\n" + "y\n" * 50)
+        self.assertEqual(set(), self.ids(2))
+
+    def test_slice_without_small_is_free(self):
+        self.small_plan(small=False)
+        self.write("d.txt", "x\n" + "y\n" * 50)
+        self.assertEqual(set(), self.ids(2))
+
+    def test_small_slice_phase_one_is_free(self):
+        self.small_plan()
+        self.write("d.txt", "x\n" + "y\n" * 50)
+        self.assertEqual(set(), self.ids(1))
+
 
 if __name__ == "__main__":
     unittest.main()
