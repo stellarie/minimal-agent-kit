@@ -28,7 +28,7 @@ export const GRANT_GROUPS: readonly GrantGroup[] = [
     tools: ["lounge_events", "lounge_schedule", "lounge_unschedule"],
     actions: ["event_list", "event_create", "event_cancel"],
   },
-  { id: "threads", label: "Start work threads", tools: ["lounge_thread_start"], actions: ["thread_start"] },
+  { id: "threads", label: "Start work threads", tools: ["lounge_thread_start", "lounge_spawn"], actions: ["thread_start"] },
   {
     id: "files",
     label: "Browse and send your files",

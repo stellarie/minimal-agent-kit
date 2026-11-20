@@ -28,6 +28,7 @@ export function openDb(file: string): DatabaseSync {
   addColumn(db, "agents", "tool_mode", "TEXT");
   addColumn(db, "rooms", "turn_mode", "TEXT");
   addColumn(db, "rooms", "slow_sec", "INTEGER");
+  addColumn(db, "threads", "parent_id", "TEXT");
   addColumn(db, "messages", "reply_to", "INTEGER");
   // Old channels keep their creation order.
   db.exec("UPDATE rooms SET position = rowid WHERE position IS NULL");

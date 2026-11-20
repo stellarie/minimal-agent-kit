@@ -362,25 +362,24 @@ test("a hook file that goes missing fails the turn before any folder or process"
   assert.equal(existsSync(r.log), false, "no claude process ran");
 });
 
-test("the claude-code kind disallows Monitor and Tmux in every mode except full", async (t) => {
+test("C15_4: the claude-code kind disallows Task and Workflow in every mode, and Monitor and Tmux in every mode except full, in one flag", async (t) => {
   const r = rig(t, "ok");
   const kind = claudeKind();
   const ctx = { home: r.home, mcpUrl: () => "http://127.0.0.1:1/mcp", ...HOST_PARTS } as RuntimeContext;
-  const modes = ["ask", "auto", "read-only", "full"] as const;
+  const modes = ["ask", "auto", "read-only", "full", undefined] as const;
   for (const toolMode of modes) {
-    const adapter = kind.create(entryOf({ toolMode }), ctx);
+    const adapter = kind.create(entryOf(toolMode === undefined ? {} : { toolMode }), ctx);
     await adapter.chatTurn(turnInput({ agent: "nana", allowedTools: ["Bash"] }), new AbortController().signal);
   }
   const logged = readLog(r.log);
-  assert.equal(logged.length, 4);
+  assert.equal(logged.length, modes.length);
   for (const [i, toolMode] of modes.entries()) {
     const argv = logged[i]!.argv;
-    const joined = argv.find((a) => a.startsWith("--disallowedTools"));
-    if (toolMode === "full") {
-      assert.equal(joined, undefined, toolMode);
-    } else {
-      assert.equal(joined, "--disallowedTools=Monitor,Tmux", toolMode);
-    }
+    const flags = argv.filter((a) => a.startsWith("--disallowedTools"));
+    assert.equal(flags.length, 1, String(toolMode));
+    // The = form: the space form takes the prompt as a tool name.
+    const want = toolMode === "full" || toolMode === undefined ? "Task,Workflow" : "Task,Workflow,Monitor,Tmux";
+    assert.equal(flags[0], `--disallowedTools=${want}`, String(toolMode));
   }
 });
 

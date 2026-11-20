@@ -48,6 +48,20 @@ export interface ThreadsOptions {
   turns: { workTurn(input: WorkTurnInput, signal?: AbortSignal): Promise<TurnOutcome> };
   now?: () => Date;
   log?: (line: string) => void;
+  // False: the turn does not start. With no `from`, only a check.
+  gate?: (roomId: string, from?: Caller | "self") => boolean;
+  // A turn ended without a stop.
+  onTurnEnd?: (roomId: string, agent: Agent, end: TurnEnd) => void;
+}
+
+export interface TurnEnd {
+  reply?: Message;
+  failed?: string;
+}
+
+// Set only by a child spawn, never from a request body.
+export interface ThreadLink {
+  parentId: string;
 }
 
 interface Run {
@@ -201,7 +215,7 @@ export class Threads {
   }
 
   // The thread starts at once with the lead's turn.
-  create(by: Caller, draft: ThreadDraft): ThreadInfo {
+  create(by: Caller, draft: ThreadDraft, link?: ThreadLink): ThreadInfo {
     if (this.#stopped) throw new LoungeError("unsupported", "the core is shutting down");
     const brief = typeof draft.brief === "string" ? draft.brief.trim() : "";
     if (!brief) throw new LoungeError("bad_thread", "a thread needs a brief");
@@ -214,13 +228,9 @@ export class Threads {
     try {
       thread = room.createThread(channel, draft.title, by);
       const cwd = explicit ?? join(this.#opts.home, "work", thread.id);
-      db.prepare("INSERT INTO threads (room_id, lead, cwd, created_by, created_at) VALUES (?, ?, ?, ?, ?)").run(
-        thread.id,
-        lead,
-        cwd,
-        by,
-        this.#now().toISOString(),
-      );
+      db.prepare(
+        "INSERT INTO threads (room_id, lead, cwd, created_by, created_at, parent_id) VALUES (?, ?, ?, ?, ?, ?)",
+      ).run(thread.id, lead, cwd, by, this.#now().toISOString(), link?.parentId ?? null);
       this.#quiet = true;
       try {
         room.post(by, thread.id, brief);
@@ -254,6 +264,19 @@ export class Threads {
     }
     if (count > 0) this.#opts.room.post(by, roomId, "stopped the work", "event");
     return count;
+  }
+
+  // Posts with no mention wake-up, then wakes one agent.
+  deliver(author: Agent, roomId: string, text: string, to: Agent): void {
+    const info = this.info(roomId);
+    if (!info || this.#stopped) return;
+    this.#quiet = true;
+    try {
+      this.#opts.room.post(author, roomId, text);
+    } finally {
+      this.#quiet = false;
+    }
+    this.#trigger(info, to, author);
   }
 
   #ids(): Agent[] {
@@ -307,6 +330,7 @@ export class Threads {
       this.#opts.log?.(`threads: ${agent} is disabled or has no runtime; ${info.id} skips it`);
       return;
     }
+    if (this.#opts.gate && !this.#opts.gate(info.id, from)) return;
     const key = `${info.id}|${agent}`;
     const running = this.#runs.get(key);
     if (running) {
@@ -325,10 +349,11 @@ export class Threads {
     this.#runs.set(key, run);
     this.#emit({ agent, roomId: info.id, active: true });
     let brief = this.#brief(info, agent, from);
+    let end: TurnEnd | undefined;
     try {
       for (;;) {
         try {
-          await this.#opts.turns.workTurn(
+          const outcome = await this.#opts.turns.workTurn(
             {
               agent,
               roomId: info.id,
@@ -344,20 +369,27 @@ export class Threads {
             },
             run.controller.signal,
           );
+          end = { reply: outcome.message };
         } catch (err) {
           if (run.controller.signal.aborted || this.#stopped) return;
           const reason = errorText(err).slice(0, 300);
           this.#opts.log?.(`threads: ${agent} turn in ${info.id} failed: ${reason}`);
           this.#opts.room.post(agent, info.id, `could not finish: ${reason}`, "event");
+          end = { failed: reason };
           return;
         }
-        if (!run.again || run.controller.signal.aborted || this.#stopped) return;
+        if (run.controller.signal.aborted || this.#stopped) {
+          end = undefined;
+          return;
+        }
+        if (!run.again || (this.#opts.gate && !this.#opts.gate(info.id))) return;
         run.again = false;
         brief = `New messages came while you worked in thread "${info.name}". Continue if they need you. Otherwise reply \`[pass]\`. ${TAIL}`;
       }
     } finally {
       this.#runs.delete(key);
       this.#emit({ agent, roomId: info.id, active: false });
+      if (end) this.#opts.onTurnEnd?.(info.id, agent, end);
     }
   }
 

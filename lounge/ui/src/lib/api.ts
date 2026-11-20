@@ -126,6 +126,16 @@ export type BoardTask =
   | { ok: true; name: string; title: string; status: string; owner: string; updated: string; items: BoardItem[] }
   | { ok: false; name: string; raw: string; warning: string };
 
+// A work thread and its child threads.
+export interface ThreadTree {
+  id: string;
+  name: string;
+  lead: Agent;
+  stopped: boolean;
+  working: Agent[];
+  children: ThreadTree[];
+}
+
 // What one agent works on now.
 export interface WorkState {
   agent: Agent;
@@ -402,6 +412,7 @@ export interface LoungeClient {
   stopThread(id: string): Promise<{ stopped: number }>;
   // Read only: the task files of the thread folder.
   blackboard(threadId: string): Promise<BoardTask[]>;
+  threadTree(threadId: string): Promise<ThreadTree>;
   work(): Promise<WorkState[]>;
   who(): Promise<Presence[]>;
   scheduler(): Promise<SchedulerStatus>;
@@ -585,6 +596,9 @@ export function createHttpClient(token: string): LoungeClient {
     async blackboard(threadId) {
       const body = await call<{ tasks: BoardTask[] }>(`/api/threads/${encodeURIComponent(threadId)}/blackboard`);
       return body.tasks;
+    },
+    threadTree(threadId) {
+      return call<ThreadTree>(`/api/threads/${encodeURIComponent(threadId)}/tree`);
     },
 
     work() {

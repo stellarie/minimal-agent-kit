@@ -18,6 +18,7 @@ import { Scheduler } from "../scheduler/scheduler.ts";
 import { LoungeError, Room, cleanNickname } from "../lounge/room.ts";
 import { Events, eventText } from "../lounge/events.ts";
 import { Threads } from "../lounge/threads.ts";
+import { Children } from "../threads/children.ts";
 import { Attachments, INLINE, MAX_ATTACHMENT, attachmentPath } from "../lounge/attachments.ts";
 import { ProfileFiles } from "../lounge/files.ts";
 import { readBoard } from "../blackboard/blackboard.ts";
@@ -71,6 +72,7 @@ const ROOM_PATH = /^\/api\/rooms\/([^/]+)$/;
 const EVENT_PATH = /^\/api\/events\/(\d+)$/;
 const THREAD_STOP_PATH = /^\/api\/threads\/([^/]+)\/stop$/;
 const THREAD_BOARD_PATH = /^\/api\/threads\/([^/]+)\/blackboard$/;
+const THREAD_TREE_PATH = /^\/api\/threads\/([^/]+)\/tree$/;
 const GRANTS_PATH = /^\/api\/grants\/([^/]+)$/;
 const APPROVAL_PATH = /^\/api\/guard\/approvals\/([^/]+)$/;
 const PLUGIN_PATH = /^\/api\/plugins\/([a-z0-9-]+)$/;
@@ -323,7 +325,10 @@ export async function startCore(opts: {
     turns: sessions,
     now: opts.now,
     log: (line) => console.log(line),
+    gate: (id, from) => children.mayStart(id, from),
+    onTurnEnd: (id, agent, end) => children.turnEnded(id, agent, end),
   });
+  const children = new Children({ db, room, threads });
   const attachments = new Attachments({ db, home: opts.home, now: opts.now });
   const reveal = opts.reveal ?? revealDefault();
   attachments.sweep();
@@ -343,6 +348,7 @@ export async function startCore(opts: {
       grants,
       plugins,
       skills,
+      children,
       reachable: () => reach.reachable(),
     },
     { log: sessionLog(join(opts.home, "mcp-session.log")) },
@@ -805,7 +811,14 @@ export async function startCore(opts: {
     if (stopMatch) {
       const author = requireOwner(req);
       if (method !== "POST") throw new HttpError(405, "method_not_allowed", "use POST");
-      sendJson(res, 200, { stopped: threads.halt(author, decodeRoomId(stopMatch[1])) });
+      sendJson(res, 200, { stopped: children.stopTree(author, decodeRoomId(stopMatch[1])) });
+      return;
+    }
+    const treeMatch = THREAD_TREE_PATH.exec(url.pathname);
+    if (treeMatch) {
+      requireOwner(req);
+      if (method !== "GET") throw new HttpError(405, "method_not_allowed", "use GET");
+      sendJson(res, 200, children.tree(decodeRoomId(treeMatch[1])));
       return;
     }
     const boardMatch = THREAD_BOARD_PATH.exec(url.pathname);

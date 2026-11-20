@@ -5,7 +5,7 @@ import { join, resolve, sep } from "node:path";
 import type { Adapter, ChatTurnInput, ChatTurnResult } from "../../core/src/adapters/types.ts";
 import { chatFolder } from "../../core/src/config.ts";
 import type { RuntimeContext, ToolMode } from "../../core/src/roster/types.ts";
-import { MODE_DISALLOWED, claudeIsolationArgs, isolationSettings } from "./isolate.ts";
+import { claudeIsolationArgs, disallowedTools, isolationSettings } from "./isolate.ts";
 
 export interface ClaudeAdapterOptions {
   command: string;
@@ -186,10 +186,8 @@ export class ClaudeAdapter implements Adapter {
       ];
       if (this.opts.model) args.push("--model", this.opts.model);
       if (this.opts.effort) args.push("--effort", this.opts.effort);
-      if (this.opts.toolMode !== undefined && this.opts.toolMode !== "full") {
-        // The = form: a list after the flag must not take the next argument.
-        args.push(`--disallowedTools=${MODE_DISALLOWED}`);
-      }
+      // The = form: a list after the flag must not take the next argument.
+      args.push(disallowedTools(this.opts.toolMode));
       if (input.readDirs && input.readDirs.length > 0) args.push("--add-dir", ...input.readDirs);
       // Print mode cannot ask: allow the granted tools.
       if (input.allowedTools && input.allowedTools.length > 0) {

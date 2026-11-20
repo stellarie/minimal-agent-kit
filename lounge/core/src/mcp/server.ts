@@ -21,6 +21,7 @@ import { presence } from "../lounge/presence.ts";
 import type { PluginTool, Plugins } from "../plugins/plugins.ts";
 import type { Roster } from "../roster/roster.ts";
 import type { Skills } from "../skills/skills.ts";
+import type { Children } from "../threads/children.ts";
 import type { DropReason, SessionEvent } from "./session-log.ts";
 import {
   SESSION_ROOM_PREFIX,
@@ -45,6 +46,7 @@ export interface McpDeps {
   grants?: Grants;
   plugins?: Plugins;
   skills?: Skills;
+  children?: Children;
 }
 
 // One file of mcp/tools is one tool: it exports a ToolModule as its default.

@@ -5,6 +5,15 @@ const HOOK_TIMEOUT_S = 600;
 export const GUARD_MATCHER = "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|Glob|Grep";
 // These shell-like tools skip the hook, so a tool mode cannot judge them.
 export const MODE_DISALLOWED = "Monitor,Tmux";
+// Native subagents bypass the agent graph: lounge_spawn replaces them.
+// Workflow too: the model reached it through ToolSearch.
+export const SUBAGENT_DISALLOWED = "Task,Workflow";
+
+// One value: a second --disallowedTools flag would replace the first.
+export function disallowedTools(toolMode: string | undefined): string {
+  const limited = toolMode !== undefined && toolMode !== "full";
+  return `--disallowedTools=${limited ? `${SUBAGENT_DISALLOWED},${MODE_DISALLOWED}` : SUBAGENT_DISALLOWED}`;
+}
 
 // The lounge guard runs before each file or shell tool.
 export function guardSettings(hookFile: string): { hooks: unknown } {
