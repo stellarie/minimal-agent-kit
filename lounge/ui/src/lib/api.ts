@@ -330,6 +330,22 @@ export type LinkState = "connecting" | "live" | "offline";
 // Same as MAX_RULES_BYTES in the core.
 export const RULES_MAX_BYTES = 16 * 1024;
 
+// One line of the wiki check. Level "not-run" means the check did not run.
+export interface WikiFinding {
+  id: string;
+  check: string;
+  level: "fail" | "consider" | "not-run";
+  file: string;
+  line: number;
+  detail: string;
+}
+
+export interface WikiSaved {
+  name: string;
+  findings: WikiFinding[];
+  fail: boolean;
+}
+
 export interface SchedulerStatus {
   enabled: boolean;
   running: string | null;
@@ -371,6 +387,9 @@ export interface LoungeClient {
   setScheduler(enabled: boolean): Promise<SchedulerStatus>;
   loungeRules(): Promise<{ text: string }>;
   saveLoungeRules(text: string): Promise<{ text: string }>;
+  wikiPages(): Promise<{ folder: string; pages: string[] }>;
+  wikiPage(name: string): Promise<{ name: string; text: string }>;
+  saveWikiPage(name: string, text: string): Promise<WikiSaved>;
   grants(): Promise<GrantTable>;
   setGrants(name: Agent, changes: Record<string, boolean>): Promise<Record<string, boolean>>;
   guard(): Promise<GuardState>;
@@ -561,6 +580,18 @@ export function createHttpClient(token: string): LoungeClient {
 
     saveLoungeRules(text) {
       return call<{ text: string }>("/api/lounge/rules", send("PUT", { text }));
+    },
+
+    wikiPages() {
+      return call<{ folder: string; pages: string[] }>("/api/wiki/pages");
+    },
+
+    wikiPage(name) {
+      return call<{ name: string; text: string }>(`/api/wiki/pages/${encodeURIComponent(name)}`);
+    },
+
+    saveWikiPage(name, text) {
+      return call<WikiSaved>(`/api/wiki/pages/${encodeURIComponent(name)}`, send("PUT", { text }));
     },
 
     grants() {

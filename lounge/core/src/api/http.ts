@@ -45,6 +45,7 @@ import { Roster } from "../roster/roster.ts";
 import { migrateRuntimes } from "../roster/migrate.ts";
 import { seedDrift } from "../roster/seed.ts";
 import { type AgentEntry, type RuntimeContext, type RuntimeKind } from "../roster/types.ts";
+import { Wiki, type WikiSetup } from "../wiki/wiki.ts";
 
 export interface CoreHandle {
   url: string;
@@ -70,7 +71,8 @@ const PLUGIN_PATH = /^\/api\/plugins\/([a-z0-9-]+)$/;
 const PLUGIN_FILE_PATH = /^\/plugins\/([a-z0-9-]+)\/(.+)$/;
 const CATEGORY_PATH = /^\/api\/categories\/([^/]+)$/;
 const AGENT_PATH = /^\/api\/agents\/([^/]+)$/;
-const RUNTIME_EFFORTS_PATH = /^\/api\/runtimes\/([^/]+)\/efforts$/;
+const WIKI_PAGE_PATH = /^\/api\/wiki\/pages\/([^/]+)$/;
+const RUNTIME_EFFORTS_PATH =/^\/api\/runtimes\/([^/]+)\/efforts$/;
 const REVEAL_PATH = /^\/api\/attachments\/([0-9a-f]{32})\/reveal$/;
 // The name segment is for downloads only.
 const ATTACHMENT_PATH = /^\/api\/attachments\/([0-9a-f]{32})(?:\/[^/]*)?$/;
@@ -183,6 +185,8 @@ export async function startCore(opts: {
   approvalMs?: number;
   // Tests must not start Explorer.
   reveal?: (path: string) => Promise<void>;
+  // Replaces the project and the WIKI_ROOT and WIKI_NAME variables; tests never read the real wiki.
+  wiki?: WikiSetup;
 }): Promise<CoreHandle> {
   const config = loadConfig(opts.home);
   if (config.host !== DEFAULT_HOST) {
@@ -252,6 +256,7 @@ export async function startCore(opts: {
   const adapters = new AdapterPool(roster, kinds, ctx);
   // Read once; PUT keeps this copy current.
   let loungeRules = readSetting(db, LOUNGE_RULES_KEY) ?? "";
+  const wiki = new Wiki(opts.wiki ?? { project: process.cwd(), root: process.env.WIKI_ROOT, name: process.env.WIKI_NAME });
   const sessions = new Sessions({
     db,
     room,
@@ -435,6 +440,28 @@ export async function startCore(opts: {
         writeSetting(db, LOUNGE_RULES_KEY, text);
         loungeRules = text;
         sendJson(res, 200, { text });
+        return;
+      }
+      throw new HttpError(405, "method_not_allowed", "use GET or PUT");
+    }
+    if (url.pathname === "/api/wiki/pages") {
+      requireOwner(req);
+      if (method !== "GET") throw new HttpError(405, "method_not_allowed", "use GET");
+      sendJson(res, 200, wiki.list());
+      return;
+    }
+    const wikiMatch = WIKI_PAGE_PATH.exec(url.pathname);
+    if (wikiMatch) {
+      requireOwner(req);
+      const name = decodeRoomId(wikiMatch[1] ?? "");
+      if (method === "GET") {
+        sendJson(res, 200, { name, text: wiki.read(name) });
+        return;
+      }
+      if (method === "PUT") {
+        const body = (await readJson(req)) as { text?: unknown } | null;
+        if (typeof body?.text !== "string") throw new HttpError(400, "bad_request", "text must be a string");
+        sendJson(res, 200, wiki.write(name, body.text));
         return;
       }
       throw new HttpError(405, "method_not_allowed", "use GET or PUT");
