@@ -57,6 +57,8 @@ export interface ChatTurnInput {
   members?: TurnMember[];
   // Context messages that the token budget dropped.
   omitted?: number;
+  // The agent's instruction file and the project files, from buildContext.
+  projectContext?: string;
   // The owner's rules.
   loungeRules?: string;
   // The lounge skills, listed by name and description.

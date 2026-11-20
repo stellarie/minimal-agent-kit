@@ -49,7 +49,9 @@ import { Roster } from "../roster/roster.ts";
 import { migrateRuntimes } from "../roster/migrate.ts";
 import { seedDrift } from "../roster/seed.ts";
 import { type AgentEntry, type RuntimeContext, type RuntimeKind } from "../roster/types.ts";
-import { Wiki, type WikiSetup } from "../wiki/wiki.ts";
+import { Wiki, wikiDir, type WikiSetup } from "../wiki/wiki.ts";
+import { buildContext } from "../adapters/context.ts";
+import type { ChatTurnInput } from "../adapters/types.ts";
 
 export interface CoreHandle {
   url: string;
@@ -165,6 +167,24 @@ function listen(server: ReturnType<typeof createServer>, host: string, port: num
   });
 }
 
+// A prompt that adds the instruction file and the project files of the agent to each system text.
+// Both are read on every call, so an edit shows at once.
+function withContext(prompt: RuntimeContext["prompt"], roster: Roster, setup: WikiSetup): RuntimeContext["prompt"] {
+  const extend = (input: ChatTurnInput): ChatTurnInput => ({
+    ...input,
+    projectContext: buildContext({
+      agent: roster.get(input.agent)?.options ?? {},
+      projectDir: setup.project,
+      wikiDir: wikiDir(setup.project, setup.root, setup.name),
+    }),
+  });
+  return {
+    ...prompt,
+    systemText: (input) => prompt.systemText(extend(input)),
+    chatPrompt: (input) => prompt.chatPrompt(extend(input)),
+  };
+}
+
 function isStaticPath(pathname: string): boolean {
   return (
     pathname !== "/health" &&
@@ -265,20 +285,21 @@ export async function startCore(opts: {
       return { command: options?.command ?? "codex", commandArgs: options?.commandArgs ?? [] };
     },
   });
+  const wikiSetup = opts.wiki ?? { project: process.cwd(), root: process.env.WIKI_ROOT, name: process.env.WIKI_NAME };
   const ctx: RuntimeContext = {
     home: opts.home,
     hookFile: HOOK_FILE,
     mcpUrl: getUrl,
     guard,
     secrets: () => Object.values(tokens),
-    prompt: withSkills({ systemText, turnText, chatPrompt, isPass }, skills),
+    prompt: withContext(withSkills({ systemText, turnText, chatPrompt, isPass }, skills), roster, wikiSetup),
     activity: { claudeToolLines, lineSplitter, toolLine },
     log: (line) => console.log(line),
   };
   const adapters = new AdapterPool(roster, kinds, ctx);
   // Read once; PUT keeps this copy current.
   let loungeRules = readSetting(db, LOUNGE_RULES_KEY) ?? "";
-  const wiki = new Wiki(opts.wiki ?? { project: process.cwd(), root: process.env.WIKI_ROOT, name: process.env.WIKI_NAME });
+  const wiki = new Wiki(wikiSetup);
   const sessions = new Sessions({
     db,
     room,

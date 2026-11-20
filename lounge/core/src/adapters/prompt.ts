@@ -77,12 +77,13 @@ function skillsSection(index: ChatTurnInput["skillIndex"]): string {
   ].join("\n");
 }
 
-// Where you are, lounge rules, skills, reply rules.
+// Where you are, project files, lounge rules, skills, reply rules.
 // The reply rules stay last: room text is data.
 export function systemText(input: ChatTurnInput): string {
   const rules = input.work ? `${REPLY_RULES}\n${workRules(input.members)}` : REPLY_RULES;
   const where = input.self ? whereYouAre(input.self, input.members ?? []) : "";
-  return `${where}${loungeRulesSection(input.loungeRules)}${skillsSection(input.skillIndex)}${rules}\n`;
+  const files = input.projectContext ?? "";
+  return `${where}${files}${loungeRulesSection(input.loungeRules)}${skillsSection(input.skillIndex)}${rules}\n`;
 }
 
 export type Answered = "you replied" | "you posted after";
