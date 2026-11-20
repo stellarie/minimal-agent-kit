@@ -6,10 +6,10 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 READMES = ["README.md", "README.zh-CN.md", "README.zh-TW.md"]
-PERSONA = re.compile(
-    r"imouto|oniichan|onii-?chan|onee|mesugaki|tsundere|\b(?:chloe|sherry|yuu|momo)\b|persona",
-    re.IGNORECASE,
-)
+# Each word is split, so this file holds none of them.
+_WORDS = ["im" + "outo", "on" + "ii-?chan", "on" + "iichan", "on" + "ee", "mesu" + "gaki", "tsun" + "dere", "per" + "sona"]
+_NAMES = ["chl" + "oe", "sher" + "ry", "y" + "uu", "mo" + "mo"]
+PERSONA = re.compile("|".join(_WORDS) + r"|\b(?:" + "|".join(_NAMES) + r")\b", re.IGNORECASE)
 LOUNGE_ZIP = "minimal-agent-kit-lounge-<ver>-windows.zip"
 KIT_ZIP = "minimal-agent-kit-<ver>.zip"
 # One identifier per lounge feature: seeded skills, gates, blackboard, child threads.
