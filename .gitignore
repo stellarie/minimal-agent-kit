@@ -8,3 +8,4 @@ lounge/ui/dist/
 lounge/app/node_modules/
 lounge/app/src-tauri/target/
 lounge/app/src-tauri/gen/
+dist/
