@@ -77,6 +77,8 @@ function runOnce(launcher: Launcher, model: string, request: ClassifyRequest, si
         "--setting-sources", "project,local",
         "--strict-mcp-config",
         "--disable-slash-commands",
+        // No tools: the call text is untrusted, so an injection has nothing to run.
+        "--tools=",
       ],
       { cwd: tmpdir(), env: { ...(opts.env ?? process.env), CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1" }, stdio: ["pipe", "pipe", "ignore"], windowsHide: true },
     );

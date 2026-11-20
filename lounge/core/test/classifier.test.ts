@@ -74,7 +74,7 @@ test("c8_3: an isolated claude -p call answers SAFE, with the tested flags and t
   assert.equal(a[a.indexOf("--system-prompt") + 1], request.system);
   assert.equal(a[a.indexOf("--output-format") + 1], "json");
   assert.equal(a[a.indexOf("--setting-sources") + 1], "project,local");
-  for (const flag of ["-p", "--strict-mcp-config", "--disable-slash-commands"]) assert.ok(a.includes(flag), flag);
+  for (const flag of ["-p", "--strict-mcp-config", "--disable-slash-commands", "--tools="]) assert.ok(a.includes(flag), flag);
   assert.equal(a.includes("--bare"), false);
   assert.equal(call!.stdin, request.user);
   assert.equal(call!.mds, "1");
