@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { readdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -17,6 +20,7 @@ import { isTextMime, type ProfileFiles, textPreview } from "../lounge/files.ts";
 import { presence } from "../lounge/presence.ts";
 import type { PluginTool, Plugins } from "../plugins/plugins.ts";
 import type { Roster } from "../roster/roster.ts";
+import type { Skills } from "../skills/skills.ts";
 import type { DropReason, SessionEvent } from "./session-log.ts";
 import {
   SESSION_ROOM_PREFIX,
@@ -40,7 +44,47 @@ export interface McpDeps {
   // Unset: every agent has every tool.
   grants?: Grants;
   plugins?: Plugins;
+  skills?: Skills;
 }
+
+// One file of mcp/tools is one tool: it exports a ToolModule as its default.
+export interface ToolContext {
+  caller: Caller;
+  deps: McpDeps;
+}
+
+export interface ToolModule {
+  name: string;
+  description: string;
+  input: Record<string, z.ZodType>;
+  // The permission the caller needs.
+  action: Action;
+  // A string comes back as plain text. Anything else comes back as JSON.
+  run(args: Record<string, unknown>, ctx: ToolContext): unknown;
+}
+
+const TOOLS_DIR = join(import.meta.dirname, "tools");
+
+// Every module of the folder, in name order. A new tool is a new file.
+async function loadToolModules(dir: string): Promise<readonly ToolModule[]> {
+  const files = readdirSync(dir)
+    .filter((f) => f.endsWith(".ts") && !f.endsWith(".d.ts"))
+    .sort();
+  const out: ToolModule[] = [];
+  for (const file of files) {
+    const mod = (await import(pathToFileURL(join(dir, file)).href)) as { default?: ToolModule };
+    const tool = mod.default;
+    if (!tool || typeof tool.name !== "string" || typeof tool.run !== "function") {
+      throw new Error(`mcp/tools/${file} must export a tool module as its default`);
+    }
+    if (out.some((m) => m.name === tool.name)) throw new Error(`mcp/tools/${file}: tool ${tool.name} already exists`);
+    out.push(tool);
+  }
+  return out;
+}
+
+// Loaded once, when this module starts.
+export const TOOL_MODULES: readonly ToolModule[] = await loadToolModules(TOOLS_DIR);
 
 function pluginSchema(tool: PluginTool): Record<string, z.ZodType> {
   const out: Record<string, z.ZodType> = {};
@@ -407,6 +451,19 @@ Why a new thread: ${why}` : args.brief;
     async ({ id }) =>
       run("session_close", () => deps.sessions.close(caller, id)),
   );
+
+  for (const tool of TOOL_MODULES) {
+    add(tool.name, { description: tool.description, inputSchema: tool.input }, async (args) => {
+      try {
+        begin();
+        if (!allowed(tool.action)) return failure(`forbidden: ${caller} may not use ${tool.action}`);
+        const out = await tool.run({ ...(args as Record<string, unknown>) }, { caller, deps });
+        return typeof out === "string" ? { content: [{ type: "text", text: out }] } : text(out);
+      } catch (err) {
+        return failureOf(err);
+      }
+    });
+  }
 
   for (const tool of deps.plugins?.tools() ?? []) {
     add(

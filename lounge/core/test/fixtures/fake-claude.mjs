@@ -11,7 +11,8 @@ function writeLog(stdin) {
   const at = argv.indexOf("--settings");
   const settings = at >= 0 ? JSON.parse(readFileSync(argv[at + 1], "utf8")) : undefined;
   const guard = { url: process.env.LOUNGE_GUARD_URL, token: process.env.LOUNGE_GUARD_TOKEN };
-  const line = JSON.stringify({ argv, stdin, cwd: process.cwd(), pid: process.pid, settings, guard });
+  const env = { CLAUDE_CODE_DISABLE_CLAUDE_MDS: process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS };
+  const line = JSON.stringify({ argv, stdin, cwd: process.cwd(), pid: process.pid, settings, guard, env });
   appendFileSync(logPath, line + "\n");
 }
 

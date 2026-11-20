@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { ApiError, type LoungeClient, type PluginInfo } from "../lib/api.ts";
   import { panelSrc } from "../lib/guard.ts";
+  import CodexSignIn from "./CodexSignIn.svelte";
 
   let { client }: { client: LoungeClient } = $props();
 
@@ -66,6 +67,7 @@
       </p>
       <p class="meta">A runtime with a guard hook runs it on every turn.</p>
     </div>
+    <CodexSignIn {client} />
     {#if plugins}
       {#if plugins.length === 0}
         <p class="hint">No plugins found. Put one in the plugins folder of the lounge home, then press Reload.</p>

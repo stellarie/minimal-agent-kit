@@ -231,6 +231,27 @@ export interface PluginInfo {
   panel?: string;
 }
 
+export interface SkillInfo {
+  name: string;
+  description: string;
+  size: number;
+}
+
+export interface SkillList {
+  // Where the skill folders live.
+  folder: string;
+  skills: SkillInfo[];
+  // A folder that is no valid skill, with the reason.
+  skipped: { name: string; reason: string }[];
+}
+
+export interface LoginView {
+  state: "signed-in" | "signed-out" | "running";
+  // The page to open while a sign-in runs.
+  url?: string;
+  error?: string;
+}
+
 export interface RuntimeOptions {
   command?: string;
   commandArgs?: string[];
@@ -406,6 +427,14 @@ export interface LoungeClient {
   plugins(): Promise<PluginInfo[]>;
   setPlugin(id: string, enabled: boolean): Promise<PluginInfo[]>;
   reloadPlugins(): Promise<PluginInfo[]>;
+  skills(): Promise<SkillList>;
+  skill(name: string): Promise<{ name: string; text: string }>;
+  createSkill(draft: { name: string; description: string; body: string }): Promise<SkillInfo>;
+  saveSkill(name: string, text: string): Promise<{ name: string; text: string }>;
+  removeSkill(name: string): Promise<void>;
+  codexLogin(): Promise<LoginView>;
+  startCodexLogin(): Promise<LoginView>;
+  cancelCodexLogin(): Promise<LoginView>;
   subscribe(on: LoungeEvents): () => void;
 }
 
@@ -658,6 +687,38 @@ export function createHttpClient(token: string): LoungeClient {
 
     async reloadPlugins() {
       return (await call<{ plugins: PluginInfo[] }>("/api/plugins/reload", { method: "POST" })).plugins;
+    },
+
+    skills() {
+      return call<SkillList>("/api/skills");
+    },
+
+    skill(name) {
+      return call<{ name: string; text: string }>(`/api/skills/${encodeURIComponent(name)}`);
+    },
+
+    createSkill(draft) {
+      return call<SkillInfo>("/api/skills", send("POST", draft));
+    },
+
+    saveSkill(name, text) {
+      return call<{ name: string; text: string }>(`/api/skills/${encodeURIComponent(name)}`, send("PUT", { text }));
+    },
+
+    async removeSkill(name) {
+      await call<unknown>(`/api/skills/${encodeURIComponent(name)}`, { method: "DELETE" });
+    },
+
+    codexLogin() {
+      return call<LoginView>("/api/codex/login");
+    },
+
+    startCodexLogin() {
+      return call<LoginView>("/api/codex/login", { method: "POST" });
+    },
+
+    cancelCodexLogin() {
+      return call<LoginView>("/api/codex/login", { method: "DELETE" });
     },
 
     subscribe(on) {

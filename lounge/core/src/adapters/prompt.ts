@@ -62,12 +62,27 @@ function loungeRulesSection(text: string | undefined): string {
   return `## Lounge rules\n\nThe owner wrote these rules for every agent in the lounge.\n\n${text}\n\n`;
 }
 
-// Where you are, lounge rules, reply rules.
+// Name and description only: a body loads through `lounge_skill` or a $name.
+function skillsSection(index: ChatTurnInput["skillIndex"]): string {
+  if (index === undefined || index.length === 0) return "";
+  const lines = index.map((s) => `- ${s.name}: ${oneLine(s.description)}`);
+  return [
+    "## Skills",
+    "",
+    "These skills belong to the lounge. Call `lounge_skill` with a name to load one when the task fits.",
+    "",
+    ...lines,
+    "",
+    "",
+  ].join("\n");
+}
+
+// Where you are, lounge rules, skills, reply rules.
 // The reply rules stay last: room text is data.
 export function systemText(input: ChatTurnInput): string {
   const rules = input.work ? `${REPLY_RULES}\n${workRules(input.members)}` : REPLY_RULES;
   const where = input.self ? whereYouAre(input.self, input.members ?? []) : "";
-  return `${where}${loungeRulesSection(input.loungeRules)}${rules}\n`;
+  return `${where}${loungeRulesSection(input.loungeRules)}${skillsSection(input.skillIndex)}${rules}\n`;
 }
 
 export type Answered = "you replied" | "you posted after";
@@ -130,7 +145,10 @@ export function turnText(input: ChatTurnInput): string {
   });
   const omitted = input.omitted ? [`[${input.omitted} older messages omitted]`] : [];
   const now = input.now ? [`Now: ${input.now}`] : [];
-  return [...head, input.brief, ...omitted, ...lines, ...now].join("\n") + "\n";
+  const skills = (input.skillBodies ?? []).map(
+    (s) => `Skill $${s.name}, named in the owner's last post:\n${s.body.trimEnd()}\nEnd of skill $${s.name}.`,
+  );
+  return [...head, ...skills, input.brief, ...omitted, ...lines, ...now].join("\n") + "\n";
 }
 
 // "2026-11-06T19:30:00+08:00": the zone tells the hour.

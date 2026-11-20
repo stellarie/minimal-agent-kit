@@ -108,6 +108,9 @@ export type LoungeErrorCode =
   | "unknown_agent"
   | "unknown_category"
   | "bad_rules"
+  | "bad_skill"
+  | "unknown_skill"
+  | "skill_exists"
   | "conflict";
 
 export class LoungeError extends Error {

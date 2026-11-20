@@ -5,6 +5,7 @@ import { join, resolve, sep } from "node:path";
 import type { Adapter, ChatTurnInput, ChatTurnResult } from "../../core/src/adapters/types.ts";
 import { chatFolder } from "../../core/src/config.ts";
 import type { RuntimeContext, ToolMode } from "../../core/src/roster/types.ts";
+import { MODE_DISALLOWED, claudeIsolationArgs, isolationSettings } from "./isolate.ts";
 
 export interface ClaudeAdapterOptions {
   command: string;
@@ -25,21 +26,6 @@ export interface ClaudeAdapterOptions {
 }
 
 const VERSION_LIMIT_MS = 10_000;
-// Must outlast the 540 s approval wait.
-const HOOK_TIMEOUT_S = 600;
-export const GUARD_MATCHER = "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|Glob|Grep";
-// These shell-like tools skip the hook, so a tool mode cannot judge them.
-export const MODE_DISALLOWED = "Monitor,Tmux";
-
-// The lounge guard runs before each file or shell tool.
-export function guardSettings(hookFile: string): unknown {
-  const command = `node "${hookFile.replace(/\\/g, "/")}"`;
-  return {
-    hooks: {
-      PreToolUse: [{ matcher: GUARD_MATCHER, hooks: [{ type: "command", command, timeout: HOOK_TIMEOUT_S }] }],
-    },
-  };
-}
 const CLOSE_WAIT_MS = 5_000;
 const NOT_FOUND = "claude not found";
 const CMD_FILE = "claude command is a .cmd file; see docs/gotchas.md";
@@ -173,7 +159,7 @@ export class ClaudeAdapter implements Adapter {
       const systemPath = join(dir, "system.md");
       const mcpPath = join(dir, "mcp.json");
       const settingsPath = join(dir, "settings.json");
-      writeFileSync(settingsPath, JSON.stringify(guardSettings(this.opts.hookFile)));
+      writeFileSync(settingsPath, JSON.stringify(isolationSettings(this.opts.hookFile)));
       writeFileSync(systemPath, this.opts.prompt.systemText(input));
       const mcp = {
         mcpServers: {
@@ -188,16 +174,12 @@ export class ClaudeAdapter implements Adapter {
       const prompt = this.opts.prompt.turnText(input);
       const workDir = input.work?.cwd ?? chatFolder(home, input.agent);
       mkdirSync(workDir, { recursive: true });
+      const isolation = claudeIsolationArgs({ mcpPath, settingsPath });
       const args = [
         ...this.opts.commandArgs,
-        "-p",
-        "--mcp-config",
-        mcpPath,
-        "--strict-mcp-config",
+        ...isolation.args,
         "--append-system-prompt-file",
         systemPath,
-        "--settings",
-        settingsPath,
         "--output-format",
         "stream-json",
         "--verbose",
@@ -219,6 +201,7 @@ export class ClaudeAdapter implements Adapter {
         cwd: workDir,
         env: {
           ...process.env,
+          ...isolation.env,
           LOUNGE_GUARD_URL: new URL(this.opts.mcpUrl()).origin,
           LOUNGE_GUARD_TOKEN: input.mcpToken,
         },

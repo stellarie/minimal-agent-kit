@@ -59,6 +59,10 @@ export interface ChatTurnInput {
   omitted?: number;
   // The owner's rules.
   loungeRules?: string;
+  // The lounge skills, listed by name and description.
+  skillIndex?: { name: string; description: string }[];
+  // The skills that the owner's last post named with $name, with their bodies.
+  skillBodies?: { name: string; body: string }[];
   onSlow(): void;
 }
 

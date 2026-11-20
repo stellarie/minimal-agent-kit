@@ -35,6 +35,7 @@
   import Composer from "./components/Composer.svelte";
   import PermissionsPanel from "./components/PermissionsPanel.svelte";
   import PluginsPanel from "./components/PluginsPanel.svelte";
+  import SkillsPanel from "./components/SkillsPanel.svelte";
   import AgentsPanel from "./components/AgentsPanel.svelte";
   import LoungeRulesPanel from "./components/LoungeRulesPanel.svelte";
   import WikiPanel from "./lib/WikiPanel.svelte";
@@ -83,7 +84,7 @@
   let problem = $state("");
   let tokenProblem = $state("");
   let now = $state(Date.now());
-  let view = $state<"lounge" | "rules" | "wiki" | "permissions" | "agents" | "plugins" | "theme">("lounge");
+  let view = $state<"lounge" | "rules" | "wiki" | "permissions" | "agents" | "skills" | "plugins" | "theme">("lounge");
   const VIEWS_FOLDED_KEY = "lounge.viewsFolded";
   let viewsFolded = $state(readFolded());
 
@@ -123,6 +124,7 @@
     ["wiki", "Wiki"],
     ["permissions", "Permissions"],
     ["agents", "Agents"],
+    ["skills", "Skills"],
     ["plugins", "Plugins"],
     ["theme", "Theme"],
   ] as const;
@@ -700,7 +702,7 @@
 
 {#if view === "theme"}
   <!-- The theme page above stays mounted, so the saved theme applies at start. -->
-{:else if view === "rules" || view === "wiki" || view === "permissions" || view === "agents" || view === "plugins"}
+{:else if view === "rules" || view === "wiki" || view === "permissions" || view === "agents" || view === "skills" || view === "plugins"}
   <main class="single">
     {#if problem}
       <p class="problem" role="alert">{problem}</p>
@@ -713,6 +715,8 @@
       <PermissionsPanel {client} pending={approvals.length} changes={guardChanges} />
     {:else if client && view === "agents"}
       <AgentsPanel {client} onChange={rosterChanged} />
+    {:else if client && view === "skills"}
+      <SkillsPanel {client} />
     {:else if client}
       <PluginsPanel {client} />
     {:else}

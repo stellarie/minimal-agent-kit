@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ClaudeAdapter, guardSettings } from "../../plugins/claude-code/adapter.ts";
+import { homedir } from "node:os";
+import { ClaudeAdapter } from "../../plugins/claude-code/adapter.ts";
 import { claudeKind } from "../../plugins/claude-code/index.ts";
+import { claudeIsolationArgs, claudeMdExcludes, guardSettings, isolationSettings } from "../../plugins/claude-code/isolate.ts";
 import { chatFolder } from "../src/config.ts";
 import type { AgentEntry, RuntimeContext } from "../src/roster/types.ts";
 import type { ChatTurnInput } from "../src/adapters/types.ts";
@@ -380,4 +382,57 @@ test("the claude-code kind disallows Monitor and Tmux in every mode except full"
       assert.equal(joined, "--disallowedTools=Monitor,Tmux", toolMode);
     }
   }
+});
+
+test("c11_4_claude_isolation_args: a turn runs without user settings, plugins, skills, or CLAUDE.md files", async (t) => {
+  const r = rig(t, "ok");
+  await r.adapter.chatTurn(turnInput(), new AbortController().signal);
+  const [entry] = readLog(r.log);
+  const { argv } = entry!;
+  const pair = (flag: string, value: string) => {
+    const at = argv.indexOf(flag);
+    assert.ok(at >= 0, `missing ${flag}`);
+    assert.equal(argv[at + 1], value, flag);
+  };
+  pair("--setting-sources", "project,local");
+  assert.ok(argv.includes("--strict-mcp-config"));
+  assert.ok(argv.includes("--disable-slash-commands"));
+  assert.ok(argv.includes("--mcp-config") && argv.includes("--settings"));
+  // --bare would skip the hook and OAuth.
+  assert.ok(!argv.includes("--bare"));
+  assert.equal(argv[0], "-p");
+  assert.equal(entry!.env!.CLAUDE_CODE_DISABLE_CLAUDE_MDS, "1");
+});
+
+test("c11_4_claude_settings: the settings file holds the guard hook for shell tools and the CLAUDE.md excludes", async (t) => {
+  const r = rig(t, "ok");
+  await r.adapter.chatTurn(turnInput(), new AbortController().signal);
+  const settings = readLog(r.log)[0]!.settings!;
+  const matcher = settings.hooks.PreToolUse[0]!.matcher.split("|");
+  assert.ok(matcher.includes("Bash") && matcher.includes("PowerShell"));
+  assert.deepEqual(settings, isolationSettings(HOST_PARTS.hookFile));
+  const excludes = settings.claudeMdExcludes!;
+  assert.ok(excludes.includes("**/CLAUDE.md"));
+  assert.ok(excludes.includes("**/CLAUDE.local.md"));
+  assert.ok(excludes.includes(`${homedir().replace(/\\/g, "/")}/.claude/CLAUDE.md`));
+  assert.deepEqual(excludes, claudeMdExcludes());
+  // The user's own allow rules are not copied.
+  assert.equal((settings as { permissions?: unknown }).permissions, undefined);
+});
+
+test("c11_4_claude_isolation_args: the pure function gives the flags and the env, and names no file twice", () => {
+  const iso = claudeIsolationArgs({ mcpPath: "m.json", settingsPath: "s.json" });
+  assert.deepEqual(iso.args, [
+    "-p",
+    "--setting-sources",
+    "project,local",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "m.json",
+    "--settings",
+    "s.json",
+    "--disable-slash-commands",
+  ]);
+  assert.deepEqual(iso.env, { CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1" });
+  assert.deepEqual(guardSettings(HOST_PARTS.hookFile), { hooks: isolationSettings(HOST_PARTS.hookFile).hooks });
 });

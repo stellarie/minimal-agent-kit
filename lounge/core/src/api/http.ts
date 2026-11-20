@@ -39,6 +39,8 @@ import { HOOK_FILE, coreKinds, mergeKinds } from "../adapters/runtimes.ts";
 import { chatPrompt, isPass, systemText, turnText } from "../adapters/prompt.ts";
 import { claudeToolLines, lineSplitter, toolLine } from "../adapters/activity.ts";
 import { Sessions } from "../sessions/sessions.ts";
+import { Skills, withSkills } from "../skills/skills.ts";
+import { CodexLogin } from "./codex-login.ts";
 import { Grants } from "../auth/grants.ts";
 import { readSetting, writeSetting } from "../db/settings.ts";
 import { Roster } from "../roster/roster.ts";
@@ -59,6 +61,9 @@ const BLOCK_ASKS_KEY = "guard.blockAsks";
 const MAX_RULES_BYTES = 16 * 1024;
 // Control characters grow sixfold in JSON.
 const RULES_BODY = MAX_RULES_BYTES * 6 + 1024;
+// A skill file may be 64 KiB before JSON escapes.
+const MAX_SKILL_BODY = 256 * 1024;
+const SKILL_PATH = /^\/api\/skills\/([^/]+)$/;
 const MESSAGES_PATH = /^\/api\/rooms\/([^/]+)\/messages$/;
 const FILES_PATH = /^\/api\/rooms\/([^/]+)\/files$/;
 const ROOM_PATH = /^\/api\/rooms\/([^/]+)$/;
@@ -84,6 +89,8 @@ const LOUNGE_STATUS: Partial<Record<string, number>> = {
   unknown_category: 404,
   unknown_plugin: 404,
   unknown_agent: 404,
+  unknown_skill: 404,
+  skill_exists: 409,
   conflict: 409,
   channel_exists: 409,
   forbidden: 403,
@@ -243,13 +250,22 @@ export async function startCore(opts: {
     classify: (_id, request, signal) => classify(request, signal, { models: () => readModels(db), cache: safeCalls }),
     classifyMs: () => classifyBudget(readModels(db).length),
   });
+  const skills = new Skills({ home: opts.home, now: opts.now });
+  // The command of the first agent on the codex runtime.
+  const codexLogin = new CodexLogin({
+    home: opts.home,
+    cli: () => {
+      const options = roster.active().find((e) => e.runtime === "codex")?.options;
+      return { command: options?.command ?? "codex", commandArgs: options?.commandArgs ?? [] };
+    },
+  });
   const ctx: RuntimeContext = {
     home: opts.home,
     hookFile: HOOK_FILE,
     mcpUrl: getUrl,
     guard,
     secrets: () => Object.values(tokens),
-    prompt: { systemText, turnText, chatPrompt, isPass },
+    prompt: withSkills({ systemText, turnText, chatPrompt, isPass }, skills),
     activity: { claudeToolLines, lineSplitter, toolLine },
     log: (line) => console.log(line),
   };
@@ -322,6 +338,7 @@ export async function startCore(opts: {
       restricted,
       grants,
       plugins,
+      skills,
       reachable: () => reach.reachable(),
     },
     { log: sessionLog(join(opts.home, "mcp-session.log")) },
@@ -465,6 +482,46 @@ export async function startCore(opts: {
         return;
       }
       throw new HttpError(405, "method_not_allowed", "use GET or PUT");
+    }
+    if (url.pathname === "/api/skills") {
+      requireOwner(req);
+      if (method === "GET") {
+        sendJson(res, 200, { folder: skills.root, ...skills.scan() });
+        return;
+      }
+      if (method === "POST") {
+        sendJson(res, 201, skills.create(await readJson(req, MAX_SKILL_BODY)));
+        return;
+      }
+      throw new HttpError(405, "method_not_allowed", "use GET or POST");
+    }
+    if (url.pathname === "/api/codex/login") {
+      requireOwner(req);
+      if (method === "GET") sendJson(res, 200, await codexLogin.status());
+      else if (method === "POST") sendJson(res, 200, await codexLogin.start());
+      else if (method === "DELETE") sendJson(res, 200, await codexLogin.cancel());
+      else throw new HttpError(405, "method_not_allowed", "use GET, POST, or DELETE");
+      return;
+    }
+    const skillMatch = SKILL_PATH.exec(url.pathname);
+    if (skillMatch) {
+      requireOwner(req);
+      const name = decodeRoomId(skillMatch[1]!);
+      if (method === "GET") {
+        sendJson(res, 200, skills.get(name));
+        return;
+      }
+      if (method === "PUT") {
+        const body = (await readJson(req, MAX_SKILL_BODY)) as { text?: unknown } | null;
+        sendJson(res, 200, skills.replace(name, body?.text));
+        return;
+      }
+      if (method === "DELETE") {
+        skills.remove(name);
+        res.writeHead(204).end();
+        return;
+      }
+      throw new HttpError(405, "method_not_allowed", "use GET, PUT, or DELETE");
     }
     if (url.pathname === "/guard/check") {
       if (method !== "POST") throw new HttpError(405, "method_not_allowed", "use POST");
@@ -957,6 +1014,7 @@ export async function startCore(opts: {
     scheduler.stop();
     approvals.close();
     await sessions.shutdown();
+    await codexLogin.close();
     await plugins.close();
     adapters.close();
     unsubscribe();

@@ -11,6 +11,7 @@ export type Action =
   | "event_cancel"
   | "thread_start"
   | "lounge_files"
+  | "lounge_skill"
   | "session_list"
   | "session_open"
   | "session_message"
@@ -33,6 +34,7 @@ const LOUNGE_ACTIONS: readonly Action[] = [
   "event_cancel",
   "thread_start",
   "lounge_files",
+  "lounge_skill",
 ];
 const SESSION_READ: readonly Action[] = ["session_list", "session_status"];
 // A chat runtime must not drive other sessions.

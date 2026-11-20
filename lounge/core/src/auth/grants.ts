@@ -18,8 +18,8 @@ export const GRANT_GROUPS: readonly GrantGroup[] = [
   {
     id: "chat",
     label: "Read and post in channels",
-    tools: ["lounge_read", "lounge_post", "lounge_who", "lounge_channels", "lounge_threads", "lounge_attachment_read"],
-    actions: ["lounge_read", "lounge_post", "lounge_who", "lounge_channels"],
+    tools: ["lounge_read", "lounge_post", "lounge_who", "lounge_channels", "lounge_threads", "lounge_attachment_read", "lounge_skill"],
+    actions: ["lounge_read", "lounge_post", "lounge_who", "lounge_channels", "lounge_skill"],
   },
   { id: "nick", label: "Change its display name", tools: ["lounge_nick"], actions: ["lounge_nick"] },
   {
