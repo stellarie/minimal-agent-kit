@@ -28,6 +28,7 @@ export interface ChildrenOptions {
   db: DatabaseSync;
   room: Room;
   threads: Threads;
+  onStop?: (id: string) => void;
 }
 
 // Child threads: a subagent is a roster agent that leads its own thread.
@@ -99,6 +100,7 @@ export class Children {
   stopTree(by: Caller, id: string): number {
     if (!this.#opts.threads.info(id)) throw new LoungeError("unknown_room", `unknown thread: ${id}`);
     this.#stopped.add(id);
+    this.#opts.onStop?.(id);
     let count = 0;
     for (const child of this.childrenOf(id)) count += this.stopTree(by, child);
     return count + this.#opts.threads.halt(by, id);

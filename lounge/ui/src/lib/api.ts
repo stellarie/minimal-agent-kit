@@ -101,6 +101,8 @@ export interface ThreadInfo extends Channel {
   cwd: string;
   createdBy: Caller;
   createdAt: string;
+  // The phase of the latest gate.
+  phase?: string;
 }
 
 export interface ThreadDraft {
@@ -200,7 +202,10 @@ export interface Approval {
   // A blocked call that waits for a hand decision.
   danger?: boolean;
   createdAt: string;
+  // Empty for a gate: it does not time out.
   expiresAt: string;
+  // Set for a gate card: the owner approves a phase of a thread.
+  gate?: { phase: string; file: string; roomId: string };
 }
 
 export interface AuditEntry {
@@ -426,6 +431,7 @@ export interface LoungeClient {
   setGrants(name: Agent, changes: Record<string, boolean>): Promise<Record<string, boolean>>;
   guard(): Promise<GuardState>;
   decide(id: string, allow: boolean): Promise<void>;
+  decideGate(id: string, decision: "approve" | "change", note: string): Promise<void>;
   guardRuleAsks(): Promise<{ enabled: boolean }>;
   setGuardRuleAsks(enabled: boolean): Promise<{ enabled: boolean }>;
   getBlockAsks(): Promise<{ enabled: boolean }>;
@@ -651,6 +657,10 @@ export function createHttpClient(token: string): LoungeClient {
 
     async decide(id, allow) {
       await call<unknown>(`/api/guard/approvals/${encodeURIComponent(id)}`, send("POST", { allow }));
+    },
+
+    async decideGate(id, decision, note) {
+      await call<unknown>(`/api/gates/${encodeURIComponent(id)}/decide`, send("POST", { decision, note }));
     },
 
     guardRuleAsks() {

@@ -111,6 +111,8 @@ export type LoungeErrorCode =
   | "bad_skill"
   | "unknown_skill"
   | "skill_exists"
+  | "bad_gate"
+  | "unknown_gate"
   | "conflict";
 
 export class LoungeError extends Error {

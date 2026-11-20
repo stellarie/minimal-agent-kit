@@ -43,6 +43,7 @@
   import { roster, setRoster } from "./lib/roster.svelte.ts";
   import type { Item } from "./lib/complete.ts";
   import ApprovalStack from "./components/ApprovalStack.svelte";
+  import PhaseHeader from "./components/PhaseHeader.svelte";
   import TokenForm from "./components/TokenForm.svelte";
   import ThemePicker from "./components/ThemePicker.svelte";
   import FontPicker from "./components/FontPicker.svelte";
@@ -261,10 +262,27 @@
 
   function setApprovals(next: Approval[]) {
     const shell = (window as unknown as { __TAURI__?: { notification?: Notifier } }).__TAURI__;
-    for (const a of newApprovals(approvals.map((x) => x.id), next)) {
+    const fresh = newApprovals(approvals.map((x) => x.id), next);
+    for (const a of fresh) {
       notifyApproval(a, { hidden: document.hidden, notifier: shell?.notification, name: nameOf });
     }
     approvals = next;
+    // A new gate sets the phase of its thread.
+    if (fresh.some((a) => a.gate)) void loadThreads();
+  }
+
+  async function decideGate(id: string, decision: "approve" | "change", note: string) {
+    if (!client) throw new Error("Not connected.");
+    try {
+      await client.decideGate(id, decision, note);
+    } catch (err) {
+      // 404 or 409: another window answered, or the thread stopped.
+      if (!(err instanceof ApiError && (err.status === 404 || err.status === 409))) {
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) fail(err);
+        throw err;
+      }
+    }
+    approvals = approvals.filter((a) => a.id !== id);
   }
 
   async function decideApproval(id: string, allow: boolean) {
@@ -767,6 +785,7 @@
         onSettings={() => (settingsOpen = true)}
         onMode={saveChannelMode}
       />
+      <PhaseHeader phase={thread?.phase} />
       {#if settingsOpen}
         {#key channel.id}
           <ChannelSettings
@@ -882,7 +901,7 @@
   <FilePreview file={previewing} {client} onClose={() => (previewing = null)} />
 {/if}
 
-<ApprovalStack {approvals} {now} onDecide={decideApproval} />
+<ApprovalStack {approvals} {now} onDecide={decideApproval} onGate={decideGate} />
 
 <style>
   .app {

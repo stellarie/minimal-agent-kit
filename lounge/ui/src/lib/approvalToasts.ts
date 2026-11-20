@@ -17,11 +17,21 @@ export function isDanger(a: Approval): boolean {
   return a.danger === true;
 }
 
+// A gate card asks for a phase decision, not a tool call.
+export function isGate(a: Approval): boolean {
+  return a.gate !== undefined;
+}
+
+// A change request says what to change.
+export function changeReady(note: string): boolean {
+  return note.trim() !== "";
+}
+
 export function toastLine(a: Approval, name: string): string {
   const flat = a.reason.replace(/\s+/g, " ").trim();
   const reason = flat.length > MAX_LINE_REASON ? `${flat.slice(0, MAX_LINE_REASON - 1)}…` : flat;
   const mark = isDanger(a) ? `${DANGER_WORD} · ` : "";
-  return `${name} · ${mark}${a.tool} · ${reason}`;
+  return `${name} · ${mark}${isGate(a) ? "gate" : a.tool} · ${reason}`;
 }
 
 // The offset from the window bottom. No composer on screen: the floor.

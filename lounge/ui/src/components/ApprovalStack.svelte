@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ApiError, type Approval } from "../lib/api.ts";
-  import { isDanger, toastBottom, toastLine, toastSpan, visibleToasts } from "../lib/approvalToasts.ts";
+  import { changeReady, isDanger, isGate, toastBottom, toastLine, toastSpan, visibleToasts } from "../lib/approvalToasts.ts";
   import { minutesLeft } from "../lib/guard.ts";
   import { nameOf } from "../lib/names.svelte.ts";
   import { whoColor } from "../lib/roster.svelte.ts";
@@ -10,12 +10,16 @@
     approvals,
     now,
     onDecide,
+    onGate,
   }: {
     approvals: Approval[];
     now: number;
     onDecide: (id: string, allow: boolean) => Promise<void>;
+    onGate: (id: string, decision: "approve" | "change", note: string) => Promise<void>;
   } = $props();
 
+  // A key holds the draft note of a gate card that asks for a change.
+  let notes = $state<Record<string, string>>({});
   let busy = $state<Record<string, boolean>>({});
   let errors = $state<Record<string, string>>({});
   let detailsId = $state<string | null>(null);
@@ -59,10 +63,18 @@
   }
 
   async function decide(id: string, allow: boolean): Promise<void> {
+    await settle(id, () => onDecide(id, allow));
+  }
+
+  async function decideGate(id: string, decision: "approve" | "change"): Promise<void> {
+    await settle(id, () => onGate(id, decision, notes[id] ?? ""));
+  }
+
+  async function settle(id: string, send: () => Promise<void>): Promise<void> {
     busy[id] = true;
     delete errors[id];
     try {
-      await onDecide(id, allow);
+      await send();
     } catch (err) {
       errors[id] = err instanceof ApiError ? err.message : "Cannot reach the core.";
     } finally {
@@ -84,28 +96,49 @@
       <article class="toast" class:danger={isDanger(a)} style:--who={whoColor(a.agent)} aria-labelledby="ap-{a.id}">
         <div class="bar">
           <p class="text" id="ap-{a.id}" title={a.reason}>{toastLine(a, nameOf(a.agent))}</p>
-          <span class="left">times out in {minutesLeft(a.expiresAt, now)} min</span>
-          <button
-            class="link"
-            type="button"
-            aria-haspopup="dialog"
-            onclick={() => (detailsId = a.id)}
-          >
-            Details
-          </button>
-          <button
-            class="btn btn--soft"
-            type="button"
-            disabled={busy[a.id]}
-            use:focusDeny
-            onclick={() => void decide(a.id, false)}
-          >
-            Deny
-          </button>
-          <button class="btn" type="button" disabled={busy[a.id]} onclick={() => void decide(a.id, true)}>
-            Allow
-          </button>
+          {#if isGate(a)}
+            <button class="btn btn--soft" type="button" disabled={busy[a.id]} onclick={() => (notes[a.id] ??= "")}>
+              Change
+            </button>
+            <button class="btn" type="button" disabled={busy[a.id]} onclick={() => void decideGate(a.id, "approve")}>
+              Approve
+            </button>
+          {:else}
+            <span class="left">times out in {minutesLeft(a.expiresAt, now)} min</span>
+            <button
+              class="link"
+              type="button"
+              aria-haspopup="dialog"
+              onclick={() => (detailsId = a.id)}
+            >
+              Details
+            </button>
+            <button
+              class="btn btn--soft"
+              type="button"
+              disabled={busy[a.id]}
+              use:focusDeny
+              onclick={() => void decide(a.id, false)}
+            >
+              Deny
+            </button>
+            <button class="btn" type="button" disabled={busy[a.id]} onclick={() => void decide(a.id, true)}>
+              Allow
+            </button>
+          {/if}
         </div>
+        {#if isGate(a) && notes[a.id] !== undefined}
+          <form
+            class="note"
+            onsubmit={(e) => {
+              e.preventDefault();
+              void decideGate(a.id, "change");
+            }}
+          >
+            <input class="field" aria-label="What should change?" placeholder="What should change?" bind:value={notes[a.id]} />
+            <button class="btn" type="submit" disabled={busy[a.id] || !changeReady(notes[a.id] ?? "")}>Send change</button>
+          </form>
+        {/if}
         {#if errors[a.id]}
           <p class="error" role="alert">{errors[a.id]}</p>
         {/if}
@@ -183,6 +216,8 @@
     cursor: pointer;
   }
   .toast :global(.btn) { padding: 2px 14px; }
+  .note { display: flex; gap: 8px; margin-top: 6px; }
+  .note .field { flex: 1 1 auto; min-width: 0; }
   .more {
     justify-self: center;
     margin: 0;

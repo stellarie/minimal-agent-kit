@@ -29,6 +29,7 @@ import { HttpError } from "./http-error.ts";
 import { revealDefault } from "../lounge/reveal.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { Approvals } from "../guard/approvals.ts";
+import { Gates } from "../gates/gates.ts";
 import { Audit } from "../guard/audit.ts";
 import { classify, classifyBudget, readModels } from "../guard/classifier.ts";
 import { Guard } from "../guard/guard.ts";
@@ -77,6 +78,7 @@ const THREAD_BOARD_PATH = /^\/api\/threads\/([^/]+)\/blackboard$/;
 const THREAD_TREE_PATH = /^\/api\/threads\/([^/]+)\/tree$/;
 const GRANTS_PATH = /^\/api\/grants\/([^/]+)$/;
 const APPROVAL_PATH = /^\/api\/guard\/approvals\/([^/]+)$/;
+const GATE_DECIDE_PATH = /^\/api\/gates\/([^/]+)\/decide$/;
 const PLUGIN_PATH = /^\/api\/plugins\/([a-z0-9-]+)$/;
 const PLUGIN_FILE_PATH = /^\/plugins\/([a-z0-9-]+)\/(.+)$/;
 const CATEGORY_PATH = /^\/api\/categories\/([^/]+)$/;
@@ -95,6 +97,7 @@ const LOUNGE_STATUS: Partial<Record<string, number>> = {
   unknown_plugin: 404,
   unknown_agent: 404,
   unknown_skill: 404,
+  unknown_gate: 404,
   skill_exists: 409,
   conflict: 409,
   channel_exists: 409,
@@ -349,7 +352,11 @@ export async function startCore(opts: {
     gate: (id, from) => children.mayStart(id, from),
     onTurnEnd: (id, agent, end) => children.turnEnded(id, agent, end),
   });
-  const children = new Children({ db, room, threads });
+  const gates = new Gates({ db, room, threads, now: opts.now });
+  // Gate cards wait in the same stack as guard cards, oldest first.
+  const queue = () => [...approvals.pending(), ...gates.cards()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  // A stopped child's open gate must not post its decision as a live owner post.
+  const children = new Children({ db, room, threads, onStop: (id) => gates.stopRoom(id) });
   const attachments = new Attachments({ db, home: opts.home, now: opts.now });
   const reveal = opts.reveal ?? revealDefault();
   attachments.sweep();
@@ -370,6 +377,7 @@ export async function startCore(opts: {
       plugins,
       skills,
       children,
+      gates,
       reachable: () => reach.reachable(),
     },
     { log: sessionLog(join(opts.home, "mcp-session.log")) },
@@ -576,7 +584,7 @@ export async function startCore(opts: {
     if (url.pathname === "/api/guard") {
       requireOwner(req);
       if (method !== "GET") throw new HttpError(405, "method_not_allowed", "use GET");
-      sendJson(res, 200, { pending: approvals.pending(), recent: guard.recent() });
+      sendJson(res, 200, { pending: queue(), recent: guard.recent() });
       return;
     }
     if (url.pathname === "/api/guard/rule-asks") {
@@ -612,6 +620,18 @@ export async function startCore(opts: {
       if (!approvals.decide(decodeRoomId(approvalMatch[1]!), body.allow)) {
         throw new HttpError(404, "unknown_approval", "no open approval with that id");
       }
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+    const gateMatch = GATE_DECIDE_PATH.exec(url.pathname);
+    if (gateMatch) {
+      const author = requireOwner(req);
+      if (method !== "POST") throw new HttpError(405, "method_not_allowed", "use POST");
+      const body = (await readJson(req)) as { decision?: unknown; note?: unknown } | null;
+      if (body?.decision !== "approve" && body?.decision !== "change") {
+        throw new HttpError(400, "bad_decision", "decision must be approve or change");
+      }
+      gates.decide(author, decodeRoomId(gateMatch[1]!), body.decision, body.note ?? "");
       sendJson(res, 200, { ok: true });
       return;
     }
@@ -1028,7 +1048,8 @@ export async function startCore(opts: {
       broadcast({ type: "roster", id: "", kind: "update" });
     }),
     offRoster,
-    approvals.onChange((pending) => broadcast({ type: "approval", pending })),
+    approvals.onChange(() => broadcast({ type: "approval", pending: queue() })),
+    gates.onChange(() => broadcast({ type: "approval", pending: queue() })),
     audit.onAdd((entry) => broadcast({ type: "guard", entry })),
     room.onMessage((message) => plugins.emit("message", message)),
     events.onFire((e) => plugins.emit("eventFire", e)),
@@ -1042,7 +1063,7 @@ export async function startCore(opts: {
     for (const t of room.typing()) ws.send(JSON.stringify({ type: "typing", ...t }));
     for (const w of threads.work()) ws.send(JSON.stringify({ type: "work", ...w, active: true }));
     ws.send(JSON.stringify({ type: "layout", ...room.layout() }));
-    ws.send(JSON.stringify({ type: "approval", pending: approvals.pending() }));
+    ws.send(JSON.stringify({ type: "approval", pending: queue() }));
   });
 
   const shutdown = async () => {
@@ -1051,6 +1072,7 @@ export async function startCore(opts: {
     reach.stop();
     scheduler.stop();
     approvals.close();
+    gates.close();
     await sessions.shutdown();
     await codexLogin.close();
     await plugins.close();

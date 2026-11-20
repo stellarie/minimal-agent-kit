@@ -14,6 +14,8 @@ export interface ThreadInfo extends Channel {
   cwd: string;
   createdBy: Caller;
   createdAt: string;
+  // Set by the latest gate of the thread.
+  phase?: string;
 }
 
 // What one agent works on now.
@@ -134,6 +136,7 @@ export class Threads {
       cwd: String(row.cwd),
       createdBy: String(row.created_by) as Caller,
       createdAt: String(row.created_at),
+      ...(row.phase ? { phase: String(row.phase) } : {}),
     };
   }
 

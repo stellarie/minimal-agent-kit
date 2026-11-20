@@ -10,6 +10,7 @@ export type Action =
   | "event_create"
   | "event_cancel"
   | "thread_start"
+  | "lounge_gate"
   | "lounge_files"
   | "lounge_skill"
   | "session_list"
@@ -33,6 +34,7 @@ const LOUNGE_ACTIONS: readonly Action[] = [
   "event_create",
   "event_cancel",
   "thread_start",
+  "lounge_gate",
   "lounge_files",
   "lounge_skill",
 ];

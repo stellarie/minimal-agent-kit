@@ -22,6 +22,7 @@ import type { PluginTool, Plugins } from "../plugins/plugins.ts";
 import type { Roster } from "../roster/roster.ts";
 import type { Skills } from "../skills/skills.ts";
 import type { Children } from "../threads/children.ts";
+import type { Gates } from "../gates/gates.ts";
 import type { DropReason, SessionEvent } from "./session-log.ts";
 import {
   SESSION_ROOM_PREFIX,
@@ -47,12 +48,15 @@ export interface McpDeps {
   plugins?: Plugins;
   skills?: Skills;
   children?: Children;
+  gates?: Gates;
 }
 
 // One file of mcp/tools is one tool: it exports a ToolModule as its default.
 export interface ToolContext {
   caller: Caller;
   deps: McpDeps;
+  // Ends when the client cancels the call.
+  signal?: AbortSignal;
 }
 
 export interface ToolModule {
@@ -455,11 +459,11 @@ Why a new thread: ${why}` : args.brief;
   );
 
   for (const tool of TOOL_MODULES) {
-    add(tool.name, { description: tool.description, inputSchema: tool.input }, async (args) => {
+    add(tool.name, { description: tool.description, inputSchema: tool.input }, async (args, extra) => {
       try {
         begin();
         if (!allowed(tool.action)) return failure(`forbidden: ${caller} may not use ${tool.action}`);
-        const out = await tool.run({ ...(args as Record<string, unknown>) }, { caller, deps });
+        const out = await tool.run({ ...(args as Record<string, unknown>) }, { caller, deps, signal: extra.signal });
         return typeof out === "string" ? { content: [{ type: "text", text: out }] } : text(out);
       } catch (err) {
         return failureOf(err);
