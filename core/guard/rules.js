@@ -316,7 +316,8 @@ function readsEnvironment(source) {
   return false;
 }
 const TOKEN_TEXT = /(tokens|secrets)[\w.*-]*\.json/i;
-const LOUNGE_TEXT = /~\d/;
+// The stem agent-lo also catches a glob of the folder name, as in .agent-lo*.
+const LOUNGE_TEXT = /agent-lo|~\d/i;
 
 const DELETE_VERBS = new Set(["remove-item", "rm", "ri", "del", "erase", "rd", "rmdir", "rimraf"]);
 const ALWAYS_RECURSIVE = new Set(["rimraf"]);

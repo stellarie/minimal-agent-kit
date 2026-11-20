@@ -81,7 +81,7 @@ def run(event, env=None):
 
     The decision is None when the guard prints nothing: a neutral allow.
     """
-    full = {k: v for k, v in os.environ.items() if not k.startswith("LOUNGE_")}
+    full = {k: v for k, v in os.environ.items() if not k.startswith("LOUNGE_") and k != "AGENT_LOUNGE_HOME"}
     full.update(env or {})
     proc = subprocess.run(
         ["node", str(GUARD)], input=event if isinstance(event, str) else json.dumps(event),
@@ -218,10 +218,43 @@ class GuardClaims(unittest.TestCase):
         self.assertEqual((proc.stdout, proc.returncode), ("", 0))
 
     def test_c1_1_allow_lounge_emits(self):
-        with Lounge({}) as lounge:
-            decision, out = run(bash("git status"), lounge.env)
+        event = bash("git status")
+        with Lounge({"decision": "allow", "asked": False}) as lounge:
+            decision, out = run(event, lounge.env)
             self.assertEqual((decision, out["hookEventName"]), ("allow", "PreToolUse"))
+            self.assertEqual(len(lounge.server.seen), 1)
+            self.assertEqual(lounge.server.seen[0][0], "/guard/check")
+            self.assertEqual(lounge.server.seen[0][1]["input"], event["tool_input"])
+
+    def test_c1_1_allow_lounge_core_answer_is_final(self):
+        with Lounge({"decision": "deny", "reason": "read-only mode"}) as lounge:
+            decision, out = run(bash("git status"), lounge.env)
+            self.assertEqual(decision, "deny")
+            self.assertIn("read-only mode", out["permissionDecisionReason"])
+            self.assertEqual(len(lounge.server.seen), 1)
+        with Lounge({"message": "bad"}, status=500) as lounge:
+            self.assertEqual(run(bash("git status"), lounge.env)[0], "deny")
+        with Lounge({}) as lounge:
+            env = lounge.env
+        self.assertEqual(run(bash("git status"), env)[0], "deny")
+
+    def test_c1_1_allow_lounge_without_token_denies(self):
+        with Lounge({"decision": "allow"}) as lounge:
+            self.assertEqual(run(bash("git status"), {"LOUNGE_GUARD_URL": lounge.url})[0], "deny")
             self.assertEqual(lounge.server.seen, [])
+
+    def test_c1_1_lounge_home_from_env(self):
+        with tempfile.TemporaryDirectory() as folder:
+            home = os.path.join(folder, "lh")
+            tokens = os.path.join(home, "tokens.json")
+            event = {"tool_name": "Read", "tool_input": {"file_path": tokens}, "cwd": folder}
+            self.assertEqual(run(event, {"AGENT_LOUNGE_HOME": home})[0], "deny")
+            self.assertNotEqual(run(event)[0], "deny")
+            cat = bash(f"cat {tokens}")
+            self.assertEqual(run(cat, {"AGENT_LOUNGE_HOME": home})[0], "deny")
+            self.assertNotEqual(run(cat)[0], "deny")
+        default = {"tool_name": "Read", "tool_input": {"file_path": os.path.expanduser("~/.agent-lounge/tokens.json")}}
+        self.assertEqual(run(default)[0], "deny")
 
     def test_c1_1_deny(self):
         self.assertEqual(run(bash("rm -rf /"))[0], "deny")
@@ -303,6 +336,11 @@ class GuardClaims(unittest.TestCase):
     def test_c1_1_block_ignores_lounge(self):
         with Lounge({"decision": "allow"}) as lounge:
             self.assertEqual(run(bash("rm -rf /"), lounge.env)[0], "deny")
+            self.assertEqual(lounge.server.seen, [])
+
+    def test_c1_1_lounge_text_names_the_home_folder(self):
+        with Lounge({"decision": "allow"}) as lounge:
+            self.assertEqual(run(bash("cat ~/.agent-lounge/to\\kens.json"), lounge.env)[0], "deny")
             self.assertEqual(lounge.server.seen, [])
 
 

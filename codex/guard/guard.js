@@ -2,10 +2,13 @@
 // PreToolUse hook for Claude Code and Codex. Reads one hook event on
 // stdin, judges it with rules.js, and prints the permission decision.
 // An allow outside a lounge turn prints nothing.
-// In a lounge turn (LOUNGE_GUARD_URL is set) an ask waits for the
-// lounge queue. Outside it, an ask in a mode that cannot prompt
+// In a lounge turn (LOUNGE_GUARD_URL is set) a rules block denies
+// here. Every other verdict, allow or ask, goes to the lounge core,
+// and its answer is final: tool modes and plugin guards judge there.
+// Outside a lounge turn, an ask in a mode that cannot prompt
 // denies. Every failure denies: a hook that cannot judge must
 // not allow.
+// AGENT_LOUNGE_HOME, when set, is the lounge home the rules protect.
 // A relaxed session (a marker file for its id) prints nothing for an ask.
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -65,7 +68,7 @@ function relaxed(event) {
   }
 }
 
-// The lounge core decides an ask. A queue that cannot answer denies.
+// The lounge core decides every call the rules did not block. A queue that cannot answer denies.
 async function queue(event, env) {
   if (!env.LOUNGE_GUARD_TOKEN) return ["deny", "the turn has no guard token"];
   try {
@@ -94,13 +97,13 @@ async function main(env = process.env) {
   if (!event || typeof event !== "object" || Array.isArray(event)) return emit("deny", "the hook input was not an event");
   let verdict;
   try {
-    verdict = judge(actionOf(event));
+    verdict = judge(actionOf(event), env.AGENT_LOUNGE_HOME ? { loungeHome: env.AGENT_LOUNGE_HOME } : undefined);
   } catch {
     return emit("deny", "the rules could not judge the call");
   }
   let decision = DECISION[verdict?.verdict] ?? "deny";
   let reason = verdict?.reason ?? "no rule matched";
-  if (decision === "ask" && env.LOUNGE_GUARD_URL) [decision, reason] = await queue(event, env);
+  if (decision !== "deny" && env.LOUNGE_GUARD_URL) [decision, reason] = await queue(event, env);
   else if (decision === "ask" && relaxed(event)) return;
   else if (decision === "ask" && NO_PROMPT_MODES.has(event.permission_mode)) {
     [decision, reason] = ["deny", `${reason}. This mode cannot prompt: ask the human to run it`];
