@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { Agent, Caller } from "../config.ts";
-import { LoungeError, type Room } from "../lounge/room.ts";
+import { LoungeError, type Message, type Room } from "../lounge/room.ts";
 import type { ThreadInfo, Threads, TurnEnd } from "../lounge/threads.ts";
 
 // Below a channel thread: lead -> implementer -> explorer.
@@ -110,17 +110,26 @@ export class Children {
     return !this.stopped(id);
   }
 
-  // A child lead with no pending turns reports to the spawner once.
+  // The last turn of a child ends: the lead's reply goes to the spawner once.
   turnEnded(id: string, agent: Agent, end: TurnEnd): void {
     const parentId = this.parentOf(id);
     const info = this.#opts.threads.info(id);
-    if (!parentId || !info || agent !== info.lead || this.#reported.has(id) || this.stopped(id)) return;
+    if (!parentId || !info || this.#reported.has(id) || this.stopped(id)) return;
     if (this.#opts.threads.work().some((w) => w.roomId === id)) return;
     this.#reported.add(id);
     const spawner = info.createdBy as Agent;
-    const body = end.failed ? `could not finish: ${end.failed}` : (end.reply?.text ?? "finished with no reply");
+    const reply = agent === info.lead ? end.reply : this.#lastFrom(id, info.lead);
+    const failed = agent === info.lead ? end.failed : undefined;
+    const body = failed ? `could not finish: ${failed}` : (reply?.text ?? "finished with no reply");
     const text = `@${spawner} child thread "${info.name}" finished: ${body}`.slice(0, REPORT_MAX);
-    this.#opts.threads.deliver(agent, parentId, text, spawner);
+    this.#opts.threads.deliver(info.lead, parentId, text, spawner);
+  }
+
+  #lastFrom(id: string, agent: Agent): Message | undefined {
+    return this.#opts.room
+      .read(id)
+      .filter((m) => m.author === agent && m.kind === undefined)
+      .at(-1);
   }
 
   // The whole tree that holds id, from its root thread.

@@ -371,7 +371,10 @@ export class Threads {
           );
           end = { reply: outcome.message };
         } catch (err) {
-          if (run.controller.signal.aborted || this.#stopped) return;
+          if (run.controller.signal.aborted || this.#stopped) {
+            end = undefined;
+            return;
+          }
           const reason = errorText(err).slice(0, 300);
           this.#opts.log?.(`threads: ${agent} turn in ${info.id} failed: ${reason}`);
           this.#opts.room.post(agent, info.id, `could not finish: ${reason}`, "event");

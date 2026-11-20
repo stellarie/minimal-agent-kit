@@ -176,6 +176,33 @@ test("c15_1: a stopped child does not report", async (t) => {
   assert.equal(h.room.read(top.id).filter((m) => m.author === "cyd").length, 0);
 });
 
+test("c15_1: a halt after a finished loop round reports nothing", async (t) => {
+  const h = setup(t);
+  const top = root(h);
+  const child = h.children.spawnChild("ada", top.id, { agent: "cyd", brief: "explore" });
+  h.room.post("owner", child.id, "@cyd also this");
+  h.turn("cyd", child.id).finish({ message: h.room.post("cyd", child.id, "half") });
+  await tick();
+  h.threads.halt("owner", child.id);
+  await tick();
+  assert.equal(h.room.read(top.id).filter((m) => m.author === "cyd").length, 0);
+});
+
+test("c15_1: when a helper ends last in a child, the lead's reply goes to the spawner", async (t) => {
+  const h = setup(t);
+  const top = root(h);
+  const child = h.children.spawnChild("ada", top.id, { agent: "cyd", brief: "explore, @dee help" });
+  h.turn("cyd", child.id).finish({ message: h.room.post("cyd", child.id, "lead result") });
+  await tick();
+  assert.equal(h.room.read(top.id).filter((m) => m.author === "cyd").length, 0, "a helper still runs");
+  h.turn("dee", child.id).finish();
+  await tick();
+  const reports = h.room.read(top.id).filter((m) => m.author === "dee" || m.author === "cyd");
+  assert.equal(reports.length, 1);
+  assert.equal(reports[0]!.author, "cyd", "the child lead reports");
+  assert.match(reports[0]!.text, /^@ada .*lead result/s);
+});
+
 test("c15_2: stopTree stops every live descendant", async (t) => {
   const h = setup(t);
   const top = root(h);
