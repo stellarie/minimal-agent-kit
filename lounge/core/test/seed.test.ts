@@ -18,7 +18,7 @@ function bundle(root: string): string {
   return dir;
 }
 
-test("C12.1: a first start copies each seed folder into <home>/skills", (t) => {
+test("c12_1: a first start copies each seed folder into <home>/skills", (t) => {
   const home = tempHome();
   t.after(home.cleanup);
   const store = new Skills({ home: home.dir });
@@ -27,7 +27,7 @@ test("C12.1: a first start copies each seed folder into <home>/skills", (t) => {
   assert.match(readFileSync(join(store.root, "ste", "SKILL.md"), "utf8"), /Seed text of ste/);
 });
 
-test("C12.1: an existing folder is never overwritten, even a broken one", (t) => {
+test("c12_1: an existing folder is never overwritten, even a broken one", (t) => {
   const home = tempHome();
   t.after(home.cleanup);
   const store = new Skills({ home: home.dir });
@@ -37,7 +37,7 @@ test("C12.1: an existing folder is never overwritten, even a broken one", (t) =>
   assert.equal(readFileSync(join(store.root, "wiki", "SKILL.md"), "utf8"), "not a skill");
 });
 
-test("C12.1: a missing bundle folder seeds nothing", (t) => {
+test("c12_1: a missing bundle folder seeds nothing", (t) => {
   const home = tempHome();
   t.after(home.cleanup);
   const store = new Skills({ home: home.dir });
@@ -45,7 +45,7 @@ test("C12.1: a missing bundle folder seeds nothing", (t) => {
   assert.equal(existsSync(store.root), false);
 });
 
-test("C12.1: the bundled lounge skills are valid, and the workflow names the lounge tools", (t) => {
+test("c12_1: the bundled lounge skills are valid, and the workflow names the lounge tools", (t) => {
   const home = tempHome();
   t.after(home.cleanup);
   const store = new Skills({ home: home.dir });
