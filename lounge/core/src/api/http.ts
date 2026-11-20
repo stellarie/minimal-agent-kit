@@ -39,6 +39,7 @@ import { HOOK_FILE, coreKinds, mergeKinds } from "../adapters/runtimes.ts";
 import { chatPrompt, isPass, systemText, turnText } from "../adapters/prompt.ts";
 import { claudeToolLines, lineSplitter, toolLine } from "../adapters/activity.ts";
 import { Sessions } from "../sessions/sessions.ts";
+import { seedSkills } from "../skills/seed.ts";
 import { Skills, withSkills } from "../skills/skills.ts";
 import { CodexLogin } from "./codex-login.ts";
 import { Grants } from "../auth/grants.ts";
@@ -185,6 +186,8 @@ export async function startCore(opts: {
   schedule?: boolean;
   // Tests point this at a folder of their own.
   bundledPlugins?: string;
+  // Seed skills to copy into <home>/skills at start; unset copies none.
+  bundledSkills?: string;
   // Fire scheduled events without the scheduler.
   events?: boolean;
   profileRoot?: string;
@@ -251,6 +254,7 @@ export async function startCore(opts: {
     classifyMs: () => classifyBudget(readModels(db).length),
   });
   const skills = new Skills({ home: opts.home, now: opts.now });
+  if (opts.bundledSkills !== undefined) seedSkills(skills, opts.bundledSkills);
   // The command of the first agent on the codex runtime.
   const codexLogin = new CodexLogin({
     home: opts.home,
