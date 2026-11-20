@@ -28,8 +28,9 @@ Guiding question: *what is the minimal amount of code and impact that leads to t
 
 - Python 3.9 or later, on `PATH` as `python3` or `python`.
 - Graphviz (`dot`), for design diagrams.
-- Node 22.13 or later, for the guard hook, the JS checks, the spike sandbox, and the optional `agent-memory` plugin.
+- Node 22.18 or later, for the guard hook, the JS checks, the spike sandbox, the optional `agent-memory` plugin, and the lounge core.
 - Claude Code, or the Codex app or CLI.
+- Windows, for the optional lounge.
 
 ## Install (๑•̀ㅂ•́)و✧
 
@@ -69,6 +70,14 @@ python tools/sandbox.py <empty-dir>
 
 The command needs network access. It prints `sandbox ready: <empty-dir>`. Each task then uses a `spike/<task>` branch there.
 
+### 6. Install the lounge (optional, Windows)
+
+```bash
+python tools/release.py
+```
+
+The command writes two zips to `dist/`: `minimal-agent-kit-<ver>.zip` holds the kit only. `minimal-agent-kit-lounge-<ver>-windows.zip` holds the kit and the lounge. Build the exe, `lounge/ui/dist`, and `lounge/core/node_modules` first, or `release.py` writes only the kit zip. Unzip the lounge zip, then run `lounge/agent-lounge.exe`. The app starts the core beside it. [INSTALL.md](INSTALL.md) lists the build commands.
+
 ## Skills and hooks
 
 | Name | Kind | What it does |
@@ -90,6 +99,21 @@ echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | node claude/gu
 ```
 
 The guard prints a JSON decision with `"permissionDecision":"deny"` and the reason. A safe command, such as `git status`, prints nothing, so the agent keeps its own permission prompts. A risky but common command, such as `git clean -fdx`, gets `"ask"`.
+
+## Lounge (≧∀≦)
+
+The lounge is an optional Windows desktop app. It runs Claude Code and Codex in chat threads, with the same guard. Windows comes first. Claude Code and Codex are the two runtimes. The core needs Node 22.18 or later. See [lounge/docs/architecture.md](lounge/docs/architecture.md).
+
+| Feature | What it does |
+|---|---|
+| Seeded skills | The first start copies `lounge-workflow`, `wiki`, and `ste` to `<home>\skills`. A skill that you edit stays as you left it. |
+| Phase gates | The tool `lounge_gate` opens an Approve or Change card at the end of design and review. Your decision wakes the lead agent. |
+| Blackboard | The read-only **Board** tab shows the task files in `.kit/tasks/`. |
+| Child threads | The tool `lounge_spawn` starts a child thread for an agent in the roster. The depth cap is 2. A stop reaches every child. The agent graph shows the tree. |
+| Isolation | A turn loads none of your own skills, plugins, `CLAUDE.md`, or `AGENTS.md`. Codex runs with its own `CODEX_HOME`, and native subagents are off. |
+| Codex sign-in | **Sign in to Codex** logs in the lounge copy of Codex. The lounge never copies your `auth.json`. |
+| Wiki panel | Lists, reads, and edits wiki pages. Each save shows the wiki check findings. |
+| Auto mode | A classifier model judges a mutating call that the rules allow. A rule ask always opens an approval card. |
 
 ## Safety (｀ω´)ゞ
 
@@ -120,6 +144,7 @@ The review phase sends the diff to a subagent. The author of a change never revi
 | Review model | `core/skills/workflow/review.md` | Opus 5.5 at medium on Claude Code, Sol 6.1 at light on Codex |
 | Project wiki | `WIKI_ROOT`, `WIKI_NAME` | `docs/wiki/` in your project. With `WIKI_ROOT` set, an absolute path or one that starts with `~`: `$WIKI_ROOT/<WIKI_NAME or project directory name>/`. The `wiki` skill creates it |
 | Memory store | `AGENT_MEMORY_HOME` | `~/.agent-memory` |
+| Lounge home | `AGENT_LOUNGE_HOME` | `%USERPROFILE%\.agent-lounge` |
 
 `WIKI_NAME` is a plain folder name, not a path. The session hook uses `WIKI_NAME` or the name of the directory where the session starts.
 
@@ -143,6 +168,10 @@ python -m unittest discover -s tests
 
 ```bash
 cd memory && npm test
+```
+
+```bash
+cd lounge/core && npm test
 ```
 
 ## License

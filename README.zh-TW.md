@@ -28,8 +28,9 @@
 
 - Python 3.9 或更新版本，在 `PATH` 中名為 `python3` 或 `python`。
 - Graphviz（`dot`），用於設計圖。
-- Node 22.13 或更新版本，用於 guard 掛鉤、JS 檢查、spike 沙箱和選用的 `agent-memory` 外掛。
+- Node 22.18 或更新版本，用於 guard 掛鉤、JS 檢查、spike 沙箱、選用的 `agent-memory` 外掛和 lounge 核心。
 - Claude Code，或 Codex 應用程式或 CLI。
+- Windows，用於選用的 lounge。
 
 ## 安裝 (๑•̀ㅂ•́)و✧
 
@@ -69,6 +70,14 @@ python tools/sandbox.py <empty-dir>
 
 該指令需要網路存取。它輸出 `sandbox ready: <empty-dir>`。之後每個任務在其中使用 `spike/<task>` 分支。
 
+### 6. 安裝 lounge（選用，Windows）
+
+```bash
+python tools/release.py
+```
+
+該指令向 `dist/` 寫出兩個 zip：`minimal-agent-kit-<ver>.zip` 只含套件，`minimal-agent-kit-lounge-<ver>-windows.zip` 含套件和 lounge。請先建置 exe、`lounge/ui/dist` 和 `lounge/core/node_modules`，否則 `release.py` 只寫出套件 zip。解壓縮 lounge zip，然後執行 `lounge/agent-lounge.exe`。應用程式會啟動它旁邊的核心。建置指令見 [INSTALL.md](INSTALL.md)。
+
 ## 技能與掛鉤
 
 | 名稱 | 類型 | 作用 |
@@ -90,6 +99,21 @@ echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | node claude/gu
 ```
 
 guard 會輸出帶有 `"permissionDecision":"deny"` 和原因的 JSON 決定。安全指令（如 `git status`）不輸出任何內容，代理保留自己的權限提示。有風險但常見的指令（如 `git clean -fdx`）得到 `"ask"`。
+
+## Lounge (≧∀≦)
+
+lounge 是選用的 Windows 桌面應用程式。它在聊天執行緒中執行 Claude Code 和 Codex，並使用同一個 guard。先支援 Windows。Claude Code 和 Codex 是兩個執行環境。核心需要 Node 22.18 或更新版本。詳見 [lounge/docs/architecture.md](lounge/docs/architecture.md)。
+
+| 功能 | 作用 |
+|---|---|
+| 預置技能 | 首次啟動把 `lounge-workflow`、`wiki` 和 `ste` 複製到 `<home>\skills`。你編輯過的技能保持原樣。 |
+| 階段關卡 | 工具 `lounge_gate` 在設計和審查結束時開啟「核准」或「修改」卡片。你的決定會喚醒負責的代理。 |
+| 黑板 | 唯讀的 **Board** 分頁顯示 `.kit/tasks/` 中的任務檔。 |
+| 子執行緒 | 工具 `lounge_spawn` 為名冊中的代理啟動子執行緒。深度上限為 2。停止會傳到每個子執行緒。代理圖顯示執行緒樹。 |
+| 隔離 | 一次工作階段輪次不載入你自己的技能、外掛、`CLAUDE.md` 或 `AGENTS.md`。Codex 使用自己的 `CODEX_HOME`，原生子代理已關閉。 |
+| Codex 登入 | **Sign in to Codex** 登入 lounge 自己的 Codex。lounge 從不複製你的 `auth.json`。 |
+| Wiki 面板 | 列出、讀取和編輯 wiki 頁面。每次儲存都會顯示 wiki 檢查結果。 |
+| 自動模式 | 分類器模型判斷規則允許的修改類呼叫。規則的詢問一律開啟核准卡片。 |
 
 ## 安全 (｀ω´)ゞ
 
@@ -120,6 +144,7 @@ guard 比對的是指令文字。在執行時拼出指令的指令碼可以繞�
 | 審查模型 | `core/skills/workflow/review.md` | Claude Code 上為 Opus 5.5（medium），Codex 上為 Sol 6.1（light） |
 | 專案 wiki | `WIKI_ROOT`、`WIKI_NAME` | 你專案中的 `docs/wiki/`。設定 `WIKI_ROOT`（絕對路徑，或以 `~` 開頭）後：`$WIKI_ROOT/<WIKI_NAME 或專案目錄名稱>/`。由 `wiki` 技能建立 |
 | 記憶儲存區 | `AGENT_MEMORY_HOME` | `~/.agent-memory` |
+| lounge 主目錄 | `AGENT_LOUNGE_HOME` | `%USERPROFILE%\.agent-lounge` |
 
 `WIKI_NAME` 是純資料夾名稱，不是路徑。工作階段掛鉤使用 `WIKI_NAME`，或工作階段啟動時所在目錄的名稱。
 
@@ -143,6 +168,10 @@ python -m unittest discover -s tests
 
 ```bash
 cd memory && npm test
+```
+
+```bash
+cd lounge/core && npm test
 ```
 
 ## 授權

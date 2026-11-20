@@ -16,7 +16,7 @@ git --version
 ```
 
 - Python must be 3.9 or later.
-- Node must be 22.13 or later. The guard hook runs on Node. If `node` is missing, ask the human before you install it.
+- Node must be 22.18 or later. The guard hook and the lounge core run on Node. The core runs `node src/main.ts`, and only Node 22.18 or later strips types by default. If `node` is missing, ask the human before you install it.
 - If `dot` is missing, ask the human before you install Graphviz:
   - Debian or Ubuntu: `sudo apt-get install -y graphviz`
   - macOS: `brew install graphviz`
@@ -78,11 +78,11 @@ timeout = 10
 statusMessage = "Checking command with guard"
 ```
 
-Codex skips a new hook until the human trusts it. Tell the human to open `/hooks` in the CLI, or **Settings > Hooks** in the app.
+Codex skips a new hook until the human trusts it. Tell the human to open `/hooks` in the CLI, or **Settings > Hooks** in the app. [codex/hooks.md](codex/hooks.md) describes the hook.
 
 ## 3c. Install agent-memory (optional)
 
-Ask the human first. It needs Node 22.13 or later, and it stores memories in `~/.agent-memory`.
+Ask the human first. It needs Node 22.18 or later, and it stores memories in `~/.agent-memory`.
 
 - Claude Code: `claude plugin install agent-memory@minimal-agent-kit`.
 - Codex: add the kit as a local marketplace in `~/.codex/config.toml`, then enable the plugin:
@@ -97,6 +97,40 @@ enabled = true
 ```
 
 Tell the human to restart, then trust the plugin hooks in **Settings > Hooks** or `/hooks`.
+
+## 3d. Install the lounge (optional, Windows only)
+
+Ask the human first. The lounge is a desktop app. It runs Claude Code and Codex in chat threads. It needs Windows, Node 22.18 or later, and at least one of the two runtimes.
+
+The release has two zips, built by `python tools/release.py` into `dist/`:
+
+| Zip | Holds |
+|---|---|
+| `minimal-agent-kit-<ver>.zip` | The kit only. |
+| `minimal-agent-kit-lounge-<ver>-windows.zip` | The kit and the lounge. |
+
+The lounge zip has the same layout as the repo. Kit files sit at the zip root. The lounge sits under `lounge/`: `lounge/agent-lounge.exe`, `lounge/core/` with its production `node_modules`, `lounge/ui/dist/`, `lounge/plugins/`, and `lounge/skills/`.
+
+To install the lounge:
+
+1. Check that Node 22.18 or later is on `PATH`. The app starts the core with it.
+2. Unzip `minimal-agent-kit-lounge-<ver>-windows.zip` into a new folder.
+3. Run `lounge/agent-lounge.exe`. It starts the core from `lounge/core/` beside it.
+4. The core keeps its data in `%USERPROFILE%\.agent-lounge`. Set `AGENT_LOUNGE_HOME` to use another folder.
+5. For Codex, tell the human to click **Sign in to Codex** in the app. Never copy `~/.codex/auth.json`.
+
+The lounge runs each runtime in isolation. It loads none of your own skills, plugins, `CLAUDE.md`, or `AGENTS.md`. It copies the skills `lounge-workflow`, `wiki`, and `ste` to `<home>\skills` on the first start. It never overwrites a skill that you edited.
+
+To build the zips from source, you need the Rust toolchain. Build the three parts first:
+
+```bash
+(cd lounge/app && npm ci && npm run tauri build)
+(cd lounge/core && npm ci)
+(cd lounge/ui && npm ci && npm run build)
+"$PY" tools/release.py
+```
+
+`release.py` always writes the kit zip. It stops with an error when `agent-lounge.exe`, `lounge/ui/dist`, or `lounge/core/node_modules` is missing, and then it writes no lounge zip. See [lounge/docs/architecture.md](lounge/docs/architecture.md).
 
 ## 4. Verify
 
@@ -148,7 +182,7 @@ Then use the `wiki` skill to create `standards.md`, `architecture.md`, and `libr
 
 ## 5b. Set up the spike sandbox (optional, once)
 
-Ask the human first. It needs Node 22 or later and network access. Ask the human for the destination, outside every project:
+Ask the human first. It needs Node 22.18 or later and network access. Ask the human for the destination, outside every project:
 
 ```bash
 "$PY" tools/sandbox.py <dest>
@@ -163,4 +197,5 @@ Report to the human:
 
 - each step: passed, failed, or skipped, with the reason
 - which target you installed: Claude Code, Codex, or both
+- whether you installed the lounge
 - any backup file you created
