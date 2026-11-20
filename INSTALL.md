@@ -10,11 +10,13 @@ Run each command. Each must print a version. Keep `PY` for later steps.
 ```bash
 PY=$(command -v python3 || command -v python)
 "$PY" --version
+node --version
 dot -V
 git --version
 ```
 
 - Python must be 3.9 or later.
+- Node must be 22.13 or later. The guard hook runs on Node. If `node` is missing, ask the human before you install it.
 - If `dot` is missing, ask the human before you install Graphviz:
   - Debian or Ubuntu: `sudo apt-get install -y graphviz`
   - macOS: `brew install graphviz`
@@ -70,8 +72,8 @@ matcher = "^Bash$"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = 'python3 "$HOME/.codex/kit/guard/guard.py"'
-command_windows = 'python "<home>/.codex/kit/guard/guard.py"'
+command = 'node "$HOME/.codex/kit/guard/guard.js"'
+command_windows = 'node "<home>/.codex/kit/guard/guard.js"'
 timeout = 10
 statusMessage = "Checking command with guard"
 ```
@@ -101,16 +103,16 @@ Tell the human to restart, then trust the plugin hooks in **Settings > Hooks** o
 Run the guard on one destructive and one safe command:
 
 ```bash
-echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | "$PY" claude/guard/guard.py; echo "exit=$?"
-echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' | "$PY" claude/guard/guard.py; echo "exit=$?"
+echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | node claude/guard/guard.js; echo
+echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' | node claude/guard/guard.js; echo
 ```
 
-Expected: `exit=2` for the first command, `exit=0` for the second.
+Expected: the first line holds `"permissionDecision":"deny"`, the second holds `"permissionDecision":"allow"`.
 
 For Claude Code, after the restart:
 
 - The session context shows the kit rules.
-- Run the Bash call `mkfs --version`. It is harmless, but it matches a deny pattern. Expect a `guard: denied` message.
+- Run the Bash call `git reset --hard --help`. It is harmless, but it matches a deny rule. Expect a `guard: git reset --hard discards work` message.
 - Never test the hook with a real destructive command.
 
 ## 5. Set up a project (optional)

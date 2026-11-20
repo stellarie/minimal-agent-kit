@@ -15,7 +15,7 @@
 `minimal-agent-kit` 為 Claude Code 和 Codex 提供一套工作流程、一種記憶模型和一張安全網。
 
 - **規則與技能**：設計、實作、審查、收尾的工作流程，含兩道人工核准關卡、BDD 情境和 Graphviz 圖。
-- **掛鉤**：一個拒絕破壞性 shell 指令的 guard（在略過模式下也有效），以及簡化技術英文（STE）檢查。
+- **掛鉤**：一個拒絕或詢問破壞性 shell 指令的 guard（在略過模式下也有效），以及簡化技術英文（STE）檢查。
 - **檢查**：用指令碼對照 JSON 計畫檢查計畫本身和變更的 Python、JS 程式碼。一個可重複使用的沙箱在寫程式碼前測試有風險的假設。
 
 每個工作階段開始時，你會看到規則和專案 wiki 索引。之後代理會先向你提問，再寫程式碼。
@@ -28,7 +28,7 @@
 
 - Python 3.9 或更新版本，在 `PATH` 中名為 `python3` 或 `python`。
 - Graphviz（`dot`），用於設計圖。
-- Node 22.13 或更新版本，用於 JS 檢查、spike 沙箱和選用的 `agent-memory` 外掛。
+- Node 22.13 或更新版本，用於 guard 掛鉤、JS 檢查、spike 沙箱和選用的 `agent-memory` 外掛。
 - Claude Code，或 Codex 應用程式或 CLI。
 
 ## 安裝 (๑•̀ㅂ•́)و✧
@@ -86,20 +86,29 @@ python tools/sandbox.py <empty-dir>
 guard 的一次往返：
 
 ```bash
-echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | python claude/guard/guard.py; echo "exit=$?"
+echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | node claude/guard/guard.js
 ```
 
-guard 會輸出 `guard: denied` 訊息，並以 `exit=2` 結束。安全指令（如 `git status`）以 `exit=0` 結束。
+guard 會輸出帶有 `"permissionDecision":"deny"` 和原因的 JSON 決定。安全指令（如 `git status`）得到 `"allow"`。有風險但常見的指令（如 `git clean -fdx`）得到 `"ask"`。
 
 ## 安全 (｀ω´)ゞ
 
 套件不會給代理新的權限。guard 只會收回權限，它不是沙箱。
 
-1. guard 把指令拆成詞元。它拒絕對危險路徑執行 `rm`、`git reset --hard`、`git clean -f`，以及強制推送到 `main`。
-2. 它用 `rules.json` 中的拒絕模式比對整條指令。
-3. 它會再次檢查 `sh -c`、`bash -c` 等包裝中的指令。
+1. guard 把指令拆成詞元，逐部分檢查。它拒絕這些：
+   - 對根目錄、主目錄或磁碟機路徑執行 `rm`。
+   - `git reset --hard`、任何強制推送，以及推送到 `main` 或 `master`。
+   - 傳給 `psql`、`mysql`、`sqlite3` 或 `sqlcmd` 的 `DROP DATABASE`。
+2. 它會詢問這些：
+   - 在暫存資料夾之外執行 `rm -r`，以及 `git clean -f`。
+   - `mkfs` 等磁碟工具，以及寫入裝置的 `dd`。
+   - 編碼或管線傳入的 shell 文字。
+   - 讀取 `.env`、`.ssh` 等機密檔案。
+3. 它會再次檢查 `sh -c`、`bash -c`、`pwsh -Command` 等包裝中的指令。
 
-guard 比對的是指令文字。在執行時拼出指令的指令碼可以繞過它。如果沒有 Python，掛鉤會失敗，Claude Code 仍會執行該指令。
+詢問會開啟正常的核准提示。在 `-p`、`bypassPermissions` 和 `dontAsk` 模式下無法開啟提示，所以 guard 把詢問變成拒絕。
+
+guard 比對的是指令文字。在執行時拼出指令的指令碼可以繞過它。如果沒有 Node，掛鉤會失敗，Claude Code 仍會執行該指令。
 
 審查階段把 diff 交給子代理。變更的作者從不審查自己的工作。
 
@@ -107,7 +116,7 @@ guard 比對的是指令文字。在執行時拼出指令的指令碼可以繞�
 
 | 設定 | 位置 | 預設值 |
 |---|---|---|
-| 拒絕模式 | `core/guard/rules.json` | `mkfs`、寫入裝置的 `dd`、`drop database` 等 |
+| guard 規則 | `core/guard/rules.js` | shell 指令的拒絕、詢問和允許規則 |
 | 審查模型 | `core/skills/workflow/review.md` | Claude Code 上為 Opus 5.5（medium），Codex 上為 Sol 6.1（light） |
 | 專案 wiki | `WIKI_ROOT`、`WIKI_NAME` | 你專案中的 `docs/wiki/`。設定 `WIKI_ROOT`（絕對路徑，或以 `~` 開頭）後：`$WIKI_ROOT/<WIKI_NAME 或專案目錄名稱>/`。由 `wiki` 技能建立 |
 | 記憶儲存區 | `AGENT_MEMORY_HOME` | `~/.agent-memory` |

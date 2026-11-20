@@ -15,7 +15,7 @@
 `minimal-agent-kit` 为 Claude Code 和 Codex 提供一套工作流、一种记忆模型和一张安全网。
 
 - **规则与技能**：设计、实现、审查、收尾的工作流，含两道人工批准关卡、BDD 场景和 Graphviz 图。
-- **钩子**：一个拒绝破坏性 shell 命令的 guard（在绕过模式下也有效），以及简化技术英语（STE）检查。
+- **钩子**：一个拒绝或询问破坏性 shell 命令的 guard（在绕过模式下也有效），以及简化技术英语（STE）检查。
 - **检查**：用脚本对照 JSON 计划检查计划本身和改动的 Python、JS 代码。一个可复用的沙箱在写代码前测试有风险的假设。
 
 每个会话开始时，你会看到规则和项目 wiki 索引。之后代理会先向你提问，再写代码。
@@ -28,7 +28,7 @@
 
 - Python 3.9 或更高版本，在 `PATH` 中名为 `python3` 或 `python`。
 - Graphviz（`dot`），用于设计图。
-- Node 22.13 或更高版本，用于 JS 检查、spike 沙箱和可选的 `agent-memory` 插件。
+- Node 22.13 或更高版本，用于 guard 钩子、JS 检查、spike 沙箱和可选的 `agent-memory` 插件。
 - Claude Code，或 Codex 应用或 CLI。
 
 ## 安装 (๑•̀ㅂ•́)و✧
@@ -86,20 +86,29 @@ python tools/sandbox.py <empty-dir>
 guard 的一次往返：
 
 ```bash
-echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | python claude/guard/guard.py; echo "exit=$?"
+echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | node claude/guard/guard.js
 ```
 
-guard 会输出 `guard: denied` 消息，并以 `exit=2` 退出。安全命令（如 `git status`）以 `exit=0` 退出。
+guard 会输出带有 `"permissionDecision":"deny"` 和原因的 JSON 决定。安全命令（如 `git status`）得到 `"allow"`。有风险但常见的命令（如 `git clean -fdx`）得到 `"ask"`。
 
 ## 安全 (｀ω´)ゞ
 
 套件不会给代理新的权限。guard 只会收回权限，它不是沙箱。
 
-1. guard 把命令拆成词元。它拒绝对危险路径执行 `rm`、`git reset --hard`、`git clean -f`，以及强制推送到 `main`。
-2. 它用 `rules.json` 中的拒绝模式匹配整条命令。
-3. 它会再次检查 `sh -c`、`bash -c` 等包装中的命令。
+1. guard 把命令拆成词元，逐部分检查。它拒绝这些：
+   - 对根目录、主目录或盘符路径执行 `rm`。
+   - `git reset --hard`、任何强制推送，以及推送到 `main` 或 `master`。
+   - 发给 `psql`、`mysql`、`sqlite3` 或 `sqlcmd` 的 `DROP DATABASE`。
+2. 它会询问这些：
+   - 在临时文件夹之外执行 `rm -r`，以及 `git clean -f`。
+   - `mkfs` 等磁盘工具，以及写入设备的 `dd`。
+   - 编码或管道传入的 shell 文本。
+   - 读取 `.env`、`.ssh` 等机密文件。
+3. 它会再次检查 `sh -c`、`bash -c`、`pwsh -Command` 等包装中的命令。
 
-guard 匹配的是命令文本。在运行时拼出命令的脚本可以绕过它。如果没有 Python，钩子会失败，Claude Code 仍会执行该命令。
+询问会打开正常的批准提示。在 `-p`、`bypassPermissions` 和 `dontAsk` 模式下无法打开提示，所以 guard 把询问变成拒绝。
+
+guard 匹配的是命令文本。在运行时拼出命令的脚本可以绕过它。如果没有 Node，钩子会失败，Claude Code 仍会执行该命令。
 
 审查阶段把 diff 交给子代理。变更的作者从不审查自己的工作。
 
@@ -107,7 +116,7 @@ guard 匹配的是命令文本。在运行时拼出命令的脚本可以绕过�
 
 | 设置 | 位置 | 默认值 |
 |---|---|---|
-| 拒绝模式 | `core/guard/rules.json` | `mkfs`、写入设备的 `dd`、`drop database` 等 |
+| guard 规则 | `core/guard/rules.js` | shell 命令的拒绝、询问和允许规则 |
 | 审查模型 | `core/skills/workflow/review.md` | Claude Code 上为 Opus 5.5（medium），Codex 上为 Sol 6.1（light） |
 | 项目 wiki | `WIKI_ROOT`、`WIKI_NAME` | 你项目中的 `docs/wiki/`。设置 `WIKI_ROOT`（绝对路径，或以 `~` 开头）后：`$WIKI_ROOT/<WIKI_NAME 或项目目录名>/`。由 `wiki` 技能创建 |
 | 记忆存储 | `AGENT_MEMORY_HOME` | `~/.agent-memory` |

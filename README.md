@@ -15,7 +15,7 @@ English · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
 `minimal-agent-kit` gives Claude Code and Codex one workflow, one memory model, and one safety net.
 
 - **Rules and skills**: a design, implement, review, and close workflow, with two human approval gates, BDD scenarios, and a Graphviz diagram.
-- **Hooks**: a guard that denies destructive shell commands, also in bypass mode, and a check for Simplified Technical English (STE).
+- **Hooks**: a guard that denies or asks about destructive shell commands, also in bypass mode, and a check for Simplified Technical English (STE).
 - **Checks**: scripts that test the JSON plan and the changed Python and JS code against it. A reusable sandbox tests risky assumptions before you write code.
 
 You see the rules and your project wiki index at the start of each session. Then the agent asks you questions before it writes code.
@@ -28,7 +28,7 @@ Guiding question: *what is the minimal amount of code and impact that leads to t
 
 - Python 3.9 or later, on `PATH` as `python3` or `python`.
 - Graphviz (`dot`), for design diagrams.
-- Node 22.13 or later, for the JS checks, the spike sandbox, and the optional `agent-memory` plugin.
+- Node 22.13 or later, for the guard hook, the JS checks, the spike sandbox, and the optional `agent-memory` plugin.
 - Claude Code, or the Codex app or CLI.
 
 ## Install (๑•̀ㅂ•́)و✧
@@ -86,20 +86,29 @@ The command needs network access. It prints `sandbox ready: <empty-dir>`. Each t
 A round trip with the guard:
 
 ```bash
-echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | python claude/guard/guard.py; echo "exit=$?"
+echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | node claude/guard/guard.js
 ```
 
-The guard prints a `guard: denied` message and exits with `exit=2`. A safe command, such as `git status`, exits with `exit=0`.
+The guard prints a JSON decision with `"permissionDecision":"deny"` and the reason. A safe command, such as `git status`, gets `"allow"`. A risky but common command, such as `git clean -fdx`, gets `"ask"`.
 
 ## Safety (｀ω´)ゞ
 
 The kit does not give the agent new power. The guard only removes power. It does not sandbox the agent.
 
-1. The guard splits the command into tokens. It denies `rm` on a dangerous path, `git reset --hard`, `git clean -f`, and a force push to `main`.
-2. It matches the full command against the deny patterns in `rules.json`.
-3. It checks commands inside `sh -c`, `bash -c`, and similar wrappers again.
+1. The guard reads the command as tokens and checks each part. It denies these:
+   - `rm` on a root, home, or drive path.
+   - `git reset --hard`, any force push, and a push to `main` or `master`.
+   - `DROP DATABASE` sent to `psql`, `mysql`, `sqlite3`, or `sqlcmd`.
+2. It asks about these:
+   - `rm -r` outside a scratch folder, and `git clean -f`.
+   - Disk tools such as `mkfs`, and `dd` to a device.
+   - Encoded or piped shell text.
+   - Reads of secret files such as `.env` and `.ssh`.
+3. It checks commands inside `sh -c`, `bash -c`, `pwsh -Command`, and similar wrappers again.
 
-The guard matches command text. A script that builds a command at run time can get past it. If Python is missing, the hook fails and Claude Code runs the command anyway.
+An ask opens the normal approval prompt. In `-p`, `bypassPermissions`, and `dontAsk` mode no prompt can open, so the guard turns an ask into a deny.
+
+The guard matches command text. A script that builds a command at run time can get past it. If Node is missing, the hook fails and Claude Code runs the command anyway.
 
 The review phase sends the diff to a subagent. The author of a change never reviews its own work.
 
@@ -107,7 +116,7 @@ The review phase sends the diff to a subagent. The author of a change never revi
 
 | Setting | Where | Default |
 |---|---|---|
-| Deny patterns | `core/guard/rules.json` | `mkfs`, `dd` to a device, `drop database`, and others |
+| Guard rules | `core/guard/rules.js` | Deny, ask, and allow rules for shell commands |
 | Review model | `core/skills/workflow/review.md` | Opus 5.5 at medium on Claude Code, Sol 6.1 at light on Codex |
 | Project wiki | `WIKI_ROOT`, `WIKI_NAME` | `docs/wiki/` in your project. With `WIKI_ROOT` set, an absolute path or one that starts with `~`: `$WIKI_ROOT/<WIKI_NAME or project directory name>/`. The `wiki` skill creates it |
 | Memory store | `AGENT_MEMORY_HOME` | `~/.agent-memory` |
