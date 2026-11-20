@@ -46,7 +46,7 @@ Repeat 3 to 5 for each scenario and claim in the slice. Record the failing-test 
 - **Run, do not guess.** A command result is evidence. Your reading of the code is a hypothesis.
 - **Long commands.** Run builds and test suites in the background when they take minutes.
 - **Guard.** If the guard denies a command, do not find a way around it. Ask the human.
-- **Subagents.** Use them only for independent slices. Give each one:
+- **Subagents.** Use them only for independent slices. Set the model and the effort from `SKILL.md`. Give each one:
   - its work item and the task file path
   - the scenarios, files, and standards it needs
   - the slice block: signature, contract, claims, and pseudocode

@@ -24,6 +24,19 @@ Guiding question for every phase: what is the minimal amount of code and impact 
 - If new evidence breaks the plan, stop. Go back to Phase 1 and tell the human what changed.
 - When the human asks for a plan only, stop after Phase 1.
 
+## Subagent models
+
+On Claude Code, set the model and the effort on each subagent you start. A subagent with no model inherits the parent model.
+
+| Work | Model | Effort |
+|---|---|---|
+| Exploration: search and read | Haiku 5.5 (`claude-haiku-5-5`) | high |
+| Implementation | Sonnet 5.5 (`claude-sonnet-5-5`) | high |
+| Harder work | Opus 5.5 (`claude-opus-5-5`) | low |
+| Review | `review.md` gives the model | |
+
+Never start a subagent on Fable or Mythos.
+
 ## Shared references
 
 - `slicing.md`: slices with contracts, and the composition table.

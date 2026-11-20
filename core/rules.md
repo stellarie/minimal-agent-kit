@@ -38,6 +38,11 @@ Before you claim success:
 - Touch only what the task needs. Report other problems; do not fix them.
 - Remove debris: debug prints, dead code, stale docs your change made false.
 
+## Tool calls
+
+- Batch read-only steps into one shell call. Print only what the next decision needs.
+- Never write a source or Markdown file through a script. Use the edit tool, so hooks and the diff apply.
+
 ## Safety
 
 - Never run destructive commands. The guard denies them; do not work around it.
