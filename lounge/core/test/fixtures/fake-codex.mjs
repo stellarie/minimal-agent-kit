@@ -31,6 +31,61 @@ if (at >= 0 && argv[at + 1] === "status") {
       process.exit(0);
     }, 50);
   }
+} else if (argv.includes("exec")) {
+  exec();
 } else {
   process.exit(0);
+}
+
+// `exec --json` replays the event shapes of a real codex run (codex-cli 0.167).
+// FAKE_CODEX_EXEC: ok | blocked | silent | fail | hang.
+function exec() {
+  const execMode = process.env.FAKE_CODEX_EXEC ?? "ok";
+  let stdin = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (d) => (stdin += d));
+  process.stdin.on("end", () => {
+    if (logPath) {
+      appendFileSync(
+        logPath,
+        JSON.stringify({
+          exec: true,
+          argv,
+          stdin,
+          cwd: process.cwd(),
+          exe: process.execPath,
+          codexHome: home,
+          guard: { url: process.env.LOUNGE_GUARD_URL, token: process.env.LOUNGE_GUARD_TOKEN },
+        }) + "\n",
+      );
+    }
+    const resumeAt = argv.indexOf("resume");
+    const thread = resumeAt >= 0 ? argv[resumeAt + 1] : "01a1fa06-0000-7000-8000-000000000001";
+    const out = (ev) => process.stdout.write(JSON.stringify(ev) + "\n");
+    if (execMode === "hang") {
+      setInterval(() => {}, 1000);
+      return;
+    }
+    if (execMode === "fail") {
+      process.stderr.write("fatal: model refused\n");
+      process.exit(1);
+    }
+    if (execMode !== "silent") out({ type: "thread.started", thread_id: thread });
+    const trust = "`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation.";
+    out({ type: "item.completed", item: { id: "item_0", type: "error", message: trust } });
+    out({ type: "turn.started" });
+    if (execMode === "blocked") {
+      process.stderr.write(
+        "2026-11-20T17:35:14.328013Z ERROR codex_core::tools::router: error=Command blocked by PreToolUse hook: test-deny blocked. Command: echo test-deny\n",
+      );
+      out({ type: "item.completed", item: { id: "item_1", type: "agent_message", text: "The hook blocked the command." } });
+    } else if (execMode === "ok") {
+      out({ type: "item.completed", item: { id: "item_1", type: "agent_message", text: "I will check the status once." } });
+      out({ type: "item.started", item: { id: "item_2", type: "command_execution", command: "git status --short", exit_code: null, status: "in_progress" } });
+      out({ type: "item.completed", item: { id: "item_2", type: "command_execution", command: "git status --short", aggregated_output: "", exit_code: 0, status: "completed" } });
+      out({ type: "item.completed", item: { id: "item_3", type: "agent_message", text: resumeAt >= 0 ? "PINEAPPLE" : "Status is clean." } });
+    }
+    out({ type: "turn.completed", usage: { input_tokens: 1, output_tokens: 1 } });
+    process.exit(0);
+  });
 }

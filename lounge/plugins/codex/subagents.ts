@@ -6,7 +6,8 @@ export const NO_SUBAGENTS_MATCHER = "^collaboration";
 
 export interface CodexHookEntry {
   matcher: string;
-  hooks: { type: "command"; command: string }[];
+  // Seconds. Unset: the Codex default.
+  hooks: { type: "command"; command: string; timeout?: number }[];
 }
 
 export function noSubagentsHook(file: string = NO_SUBAGENTS_FILE): CodexHookEntry {
