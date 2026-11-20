@@ -73,7 +73,7 @@ export class Guard {
   #now: () => Date;
   #mode: (agent: string) => ToolMode;
   #classify: (agent: string, request: ClassifyRequest, signal: AbortSignal) => Promise<string> | undefined;
-  #classifyMs: number;
+  #classifyMs: number | (() => number);
   #ruleAsks: () => boolean;
   #blockAsks: () => boolean;
 
@@ -89,7 +89,8 @@ export class Guard {
     mode?: (agent: string) => ToolMode;
     // Unset result: the agent's runtime has no classifier.
     classify?: (agent: string, request: ClassifyRequest, signal: AbortSignal) => Promise<string> | undefined;
-    classifyMs?: number;
+    // A function is read on every check, so the limit can follow the model list.
+    classifyMs?: number | (() => number);
     // False: a rule ask does not open a card.
     ruleAsks?: () => boolean;
     // True: an askable block opens a card.
@@ -246,7 +247,7 @@ export class Guard {
   // Unclear means a card.
   async #auto(agent: string, action: GuardAction, signal?: AbortSignal): Promise<GuardResult> {
     const prefix = "auto mode";
-    const limit = this.#classifyMs;
+    const limit = typeof this.#classifyMs === "function" ? this.#classifyMs() : this.#classifyMs;
     const started = performance.now();
     const spent = () => performance.now() - started;
     const request = classifyRequest(agent, action, (text) => this.#redact(text), randomBytes(8).toString("hex"));

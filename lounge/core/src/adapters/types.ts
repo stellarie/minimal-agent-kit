@@ -1,5 +1,4 @@
 import type { Agent } from "../config.ts";
-import type { ClassifyRequest } from "../guard/modes.ts";
 import type { Message } from "../lounge/room.ts";
 
 export type AdapterName = string;
@@ -75,6 +74,4 @@ export interface Adapter {
   name: AdapterName;
   available(): Promise<{ ok: boolean; reason?: string }>;
   chatTurn(input: ChatTurnInput, signal: AbortSignal): Promise<ChatTurnResult>;
-  // Judges one tool call for auto mode. Returns the model text. Runs no tools.
-  classify?(request: ClassifyRequest, signal: AbortSignal): Promise<string>;
 }

@@ -6,10 +6,13 @@ import { delimiter, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Approvals, ApprovalInput } from "../src/guard/approvals.ts";
 import { Audit } from "../src/guard/audit.ts";
-import { classify, MODELS_KEY, readModels, resolveClaude, type ClassifierOptions } from "../src/guard/classifier.ts";
+import { classify, classifyBudget, MODELS_KEY, readModels, resolveClaude, type ClassifierOptions } from "../src/guard/classifier.ts";
 import { Guard } from "../src/guard/guard.ts";
-import { classifyRequest, parseClassifier, type ClassifyRequest, type ToolMode } from "../src/guard/modes.ts";
+import { CLASSIFY_MS, classifyRequest, parseClassifier, type ClassifyRequest, type ToolMode } from "../src/guard/modes.ts";
 import { writeSetting } from "../src/db/settings.ts";
+import { startCore } from "../src/api/http.ts";
+import { replyAdapter } from "../src/adapters/stub.ts";
+import type { RuntimeKind } from "../src/roster/types.ts";
 import { tempHome } from "./helpers.ts";
 
 // The fake claude reads its per-model behavior from a plan file and logs each call.
@@ -195,7 +198,7 @@ class FakeApprovals {
   }
 }
 
-function guardRig(t: TestContext, b: ReturnType<typeof bench>, mode: ToolMode) {
+function guardRig(t: TestContext, b: ReturnType<typeof bench>, mode: ToolMode, classifyMs?: number | (() => number)) {
   const home = tempHome();
   t.after(() => home.cleanup());
   const approvals = new FakeApprovals();
@@ -204,6 +207,7 @@ function guardRig(t: TestContext, b: ReturnType<typeof bench>, mode: ToolMode) {
     approvals: approvals as unknown as Approvals,
     audit: new Audit(home.dir),
     mode: () => mode,
+    ...(classifyMs === undefined ? {} : { classifyMs }),
     classify: (_agent, request, sig) => classify(request, sig, b.opts),
   });
   return { approvals, check: (tool: string, input: Record<string, unknown>) => guard.check("nana", guard.action(tool, input, CWD)) };
@@ -258,4 +262,65 @@ test("sc15: when all models time out, an approval card opens and nothing is allo
   assert.equal(g.approvals.cards.length, 1);
   assert.match(g.approvals.cards[0]!.reason, /^auto mode: the check failed: .*timed out/);
   assert.deepEqual([result.decision, result.asked], ["deny", true]);
+});
+
+test("the guard limit is the per-model limit times the model count, and an empty list still gets one", () => {
+  assert.equal(classifyBudget(3), 3 * CLASSIFY_MS);
+  assert.equal(classifyBudget(2, 500), 1000);
+  assert.equal(classifyBudget(0), CLASSIFY_MS);
+});
+
+test("c8_2: a first model that times out still reaches the second within the guard's total limit", async (t) => {
+  const b = bench(t, { slow: { hang: true }, m2: { result: "SAFE" } }, ["slow", "m2"], { timeoutMs: 600 });
+  const budget = () => classifyBudget(b.opts.models().length, 600);
+  const g = guardRig(t, b, "auto", budget);
+  assert.deepEqual(await g.check(...MUTATE), { decision: "allow", asked: false });
+  assert.deepEqual(b.calls().map((c) => c.model), ["slow", "m2"]);
+  // With one flat limit of the same size, the second model never runs.
+  const flat = bench(t, { slow: { hang: true }, m2: { result: "SAFE" } }, ["slow", "m2"], { timeoutMs: 600 });
+  const f = guardRig(t, flat, "auto", 600);
+  assert.equal((await f.check(...MUTATE)).asked, true);
+});
+
+test("c8_1: a rule ask opens a card with no spawn, and a guard that reads its limit as a function still works", async (t) => {
+  const b = bench(t, { m1: { result: "SAFE" } }, ["m1"]);
+  const g = guardRig(t, b, "auto", () => CLASSIFY_MS);
+  await g.check("PowerShell", { command: "Remove-Item -Recurse E:\\projects\\x\\src" });
+  assert.equal(g.approvals.cards.length, 1);
+  assert.equal(b.calls().length, 0);
+});
+
+test("the core routes an auto-mode call to the classifier, and an empty model list opens a card", async (t) => {
+  const home = tempHome();
+  const kind: RuntimeKind = {
+    id: "claude-code",
+    label: "Claude Code",
+    efforts: () => ["low"],
+    models: () => ["opus"],
+    create: () => replyAdapter("claude-code", ""),
+    toolModes: true,
+  };
+  const core = await startCore({ home: home.dir, port: 0, schedule: false, approvalMs: 10_000, runtimes: [kind] });
+  t.after(async () => {
+    await core.close();
+    home.cleanup();
+  });
+  const tokens = JSON.parse(readFileSync(join(home.dir, "tokens.json"), "utf8")) as Record<string, string>;
+  const api = (path: string, init: RequestInit & { as?: string } = {}) => {
+    const { as = "owner", ...rest } = init;
+    return fetch(core.url + path, { ...rest, headers: { "content-type": "application/json", authorization: `Bearer ${tokens[as]}` } });
+  };
+  const moved = await api("/api/agents/ada", { method: "PATCH", body: JSON.stringify({ runtime: "claude-code", toolMode: "auto" }) });
+  assert.equal(moved.status, 200);
+  const asked = api("/guard/check", { method: "POST", as: "ada", body: JSON.stringify({ tool: "Bash", input: { command: "mkdir out" }, cwd: CWD }) });
+  let card: { id: string; reason: string } | undefined;
+  for (let i = 0; i < 300 && card === undefined; i++) {
+    const g = (await (await api("/api/guard")).json()) as { pending: { id: string; reason: string }[] };
+    card = g.pending[0];
+    if (card === undefined) await new Promise((r) => setTimeout(r, 10));
+  }
+  assert.ok(card, "the empty model list opens a card");
+  assert.match(card.reason, /no classifier model is set/);
+  await api(`/api/guard/approvals/${card.id}`, { method: "POST", body: JSON.stringify({ allow: false }) });
+  assert.equal(((await (await asked).json()) as { decision: string }).decision, "deny");
 });

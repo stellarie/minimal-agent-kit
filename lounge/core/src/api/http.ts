@@ -28,6 +28,7 @@ import { revealDefault } from "../lounge/reveal.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { Approvals } from "../guard/approvals.ts";
 import { Audit } from "../guard/audit.ts";
+import { classify, classifyBudget, readModels } from "../guard/classifier.ts";
 import { Guard } from "../guard/guard.ts";
 import { rosterMode } from "../guard/modes.ts";
 import { Plugins } from "../plugins/plugins.ts";
@@ -220,6 +221,8 @@ export async function startCore(opts: {
   const grants: Grants = new Grants(db, () => plugins.grantGroups());
   const approvals = new Approvals({ now: opts.now, timeoutMs: opts.approvalMs });
   const audit = new Audit(opts.home);
+  // Commands the classifier found safe.
+  const safeCalls = new Set<string>();
   const guard = new Guard({
     home: opts.home,
     approvals,
@@ -230,8 +233,9 @@ export async function startCore(opts: {
     mode: rosterMode(roster),
     ruleAsks: () => readSetting(db, RULE_ASKS_KEY) !== "false",
     blockAsks: () => readSetting(db, BLOCK_ASKS_KEY) === "true",
-    // The pool exists after the guard, so read it at call time.
-    classify: (id, request, signal) => adapters.get(id)?.classify?.(request, signal),
+    // The model list is read on every call, so a change applies at once.
+    classify: (_id, request, signal) => classify(request, signal, { models: () => readModels(db), cache: safeCalls }),
+    classifyMs: () => classifyBudget(readModels(db).length),
   });
   const ctx: RuntimeContext = {
     home: opts.home,

@@ -26,6 +26,11 @@ export interface ClassifierOptions {
   cacheMax?: number;
 }
 
+// The whole list gets a turn at the full time per model. An empty list still gets one.
+export function classifyBudget(modelCount: number, perModelMs: number = CLASSIFY_MS): number {
+  return Math.max(1, modelCount) * perModelMs;
+}
+
 // A comma list, in the order of preference.
 export function readModels(db: DatabaseSync): string[] {
   return (readSetting(db, MODELS_KEY) ?? "").split(",").map((m) => m.trim()).filter((m) => m !== "");
@@ -113,12 +118,11 @@ export async function classify(request: ClassifyRequest, signal: AbortSignal, op
   const key = cacheKey(request);
   if (opts.cache?.has(key)) return "SAFE";
   const models = opts.models();
-  const launcher = opts.claude ?? resolveClaude(opts.env);
   const failures: string[] = [];
   for (const model of models) {
     let text: string;
     try {
-      text = await runOnce(launcher, model, request, signal, opts);
+      text = await runOnce(opts.claude ?? resolveClaude(opts.env), model, request, signal, opts);
     } catch (err) {
       if (signal.aborted) throw err;
       failures.push(`${model}: ${err instanceof Error ? err.message : String(err)}`);
