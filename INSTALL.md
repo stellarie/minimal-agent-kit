@@ -107,7 +107,7 @@ echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | node claude/gu
 echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' | node claude/guard/guard.js; echo
 ```
 
-Expected: the first line holds `"permissionDecision":"deny"`, the second holds `"permissionDecision":"allow"`.
+Expected: the first line holds `"permissionDecision":"deny"`. The second line is empty, because the guard prints nothing for a safe command.
 
 For Claude Code, after the restart:
 

@@ -89,7 +89,7 @@ A round trip with the guard:
 echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | node claude/guard/guard.js
 ```
 
-The guard prints a JSON decision with `"permissionDecision":"deny"` and the reason. A safe command, such as `git status`, gets `"allow"`. A risky but common command, such as `git clean -fdx`, gets `"ask"`.
+The guard prints a JSON decision with `"permissionDecision":"deny"` and the reason. A safe command, such as `git status`, prints nothing, so the agent keeps its own permission prompts. A risky but common command, such as `git clean -fdx`, gets `"ask"`.
 
 ## Safety (｀ω´)ゞ
 

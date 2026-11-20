@@ -89,7 +89,7 @@ guard 的一次往返：
 echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | node claude/guard/guard.js
 ```
 
-guard 会输出带有 `"permissionDecision":"deny"` 和原因的 JSON 决定。安全命令（如 `git status`）得到 `"allow"`。有风险但常见的命令（如 `git clean -fdx`）得到 `"ask"`。
+guard 会输出带有 `"permissionDecision":"deny"` 和原因的 JSON 决定。安全命令（如 `git status`）不输出任何内容，代理保留自己的权限提示。有风险但常见的命令（如 `git clean -fdx`）得到 `"ask"`。
 
 ## 安全 (｀ω´)ゞ
 

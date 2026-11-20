@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // PreToolUse hook for Claude Code and Codex. Reads one hook event on
 // stdin, judges it with rules.js, and prints the permission decision.
+// An allow outside a lounge turn prints nothing.
 // In a lounge turn (LOUNGE_GUARD_URL is set) an ask waits for the
 // lounge queue. Outside it, an ask in a mode that cannot prompt
 // denies. Every failure denies: a hook that cannot judge must
@@ -86,6 +87,8 @@ async function main(env = process.env) {
   else if (decision === "ask" && NO_PROMPT_MODES.has(event.permission_mode)) {
     [decision, reason] = ["deny", `${reason}. This mode cannot prompt: ask the human to run it`];
   }
+  // Outside a lounge turn an allow prints nothing: the harness keeps its own prompts.
+  if (decision === "allow" && !env.LOUNGE_GUARD_URL) return;
   emit(decision, reason);
 }
 

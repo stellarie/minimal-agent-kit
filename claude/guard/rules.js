@@ -36,9 +36,10 @@ const HIDDEN = [
   [/\|\s*(ba|z|da)?sh\b/i, "pipes text into a shell"],
 ];
 
-// Folder deletes written in another language.
+// Folder deletes written in another language. A bare name counts as a call: a
+// "(" follows, or a quote, "$", or word follows after a space (Ruby, Perl).
 const CODE_DELETE =
-  /\b(rmSync|rmdirSync|rmtree|removedirs|remove_dir_all|DeleteDirectory|rm_rf|emptyDirSync|emptyDir)\b|\bfs(\.promises)?\.(rm|rmdir)\s*\(|\[(system\.)?io\.directory\]::delete\s*\(|\.delete\s*\(\s*\$true\s*\)/i;
+  /\b(rmSync|rmdirSync|rmtree|removedirs|remove_dir_all|DeleteDirectory|rm_rf|emptyDirSync|emptyDir)\b(?=\s*\(|\s+['"$\w])|\bfs(\.promises)?\.(rm|rmdir)\s*\(|\[(system\.)?io\.directory\]::delete\s*\(|\.delete\s*\(\s*\$true\s*\)/i;
 // A root, home, or system path inside code text.
 const CODE_ROOT =
   /\b[a-z]:[\\/]+(users|windows|program|projects)?\b|['"`][a-z]:[\\/]*['"`]|homedir\s*\(|userprofile|expanduser|Path\.home|\$HOME|['"`]~[\\/'"`]|['"`]\/['"`]/i;
