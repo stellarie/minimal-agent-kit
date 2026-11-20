@@ -1,3 +1,5 @@
 .design/
 .kit/
 __pycache__/
+lounge/core/node_modules/
+lounge/core/dist/
