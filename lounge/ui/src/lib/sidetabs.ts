@@ -1,6 +1,6 @@
-export type SideTab = "members" | "events" | "files";
+export type SideTab = "members" | "events" | "files" | "board";
 
-export const SIDE_TABS: readonly SideTab[] = ["members", "events", "files"];
+export const SIDE_TABS: readonly SideTab[] = ["members", "events", "files", "board"];
 export const SIDE_TAB_KEY = "lounge.sideTab";
 
 export function readSideTab(storage: Pick<Storage, "getItem">): SideTab {

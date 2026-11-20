@@ -20,6 +20,7 @@ import { Events, eventText } from "../lounge/events.ts";
 import { Threads } from "../lounge/threads.ts";
 import { Attachments, INLINE, MAX_ATTACHMENT, attachmentPath } from "../lounge/attachments.ts";
 import { ProfileFiles } from "../lounge/files.ts";
+import { readBoard } from "../blackboard/blackboard.ts";
 import { bearerToken, createMcpHandler, reachableCallers } from "../mcp/server.ts";
 import { sessionLog } from "../mcp/session-log.ts";
 import { contentType, serveStatic } from "./static.ts";
@@ -62,6 +63,7 @@ const FILES_PATH = /^\/api\/rooms\/([^/]+)\/files$/;
 const ROOM_PATH = /^\/api\/rooms\/([^/]+)$/;
 const EVENT_PATH = /^\/api\/events\/(\d+)$/;
 const THREAD_STOP_PATH = /^\/api\/threads\/([^/]+)\/stop$/;
+const THREAD_BOARD_PATH = /^\/api\/threads\/([^/]+)\/blackboard$/;
 const GRANTS_PATH = /^\/api\/grants\/([^/]+)$/;
 const APPROVAL_PATH = /^\/api\/guard\/approvals\/([^/]+)$/;
 const PLUGIN_PATH = /^\/api\/plugins\/([a-z0-9-]+)$/;
@@ -716,6 +718,16 @@ export async function startCore(opts: {
       const author = requireOwner(req);
       if (method !== "POST") throw new HttpError(405, "method_not_allowed", "use POST");
       sendJson(res, 200, { stopped: threads.halt(author, decodeRoomId(stopMatch[1])) });
+      return;
+    }
+    const boardMatch = THREAD_BOARD_PATH.exec(url.pathname);
+    if (boardMatch) {
+      requireOwner(req);
+      if (method !== "GET") throw new HttpError(405, "method_not_allowed", "use GET");
+      const roomId = decodeRoomId(boardMatch[1]!);
+      const thread = threads.info(roomId);
+      if (!thread) throw new LoungeError("unknown_room", `no thread: ${roomId}`);
+      sendJson(res, 200, { tasks: readBoard(thread.cwd) });
       return;
     }
     if (url.pathname === "/api/work") {

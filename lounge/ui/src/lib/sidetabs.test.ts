@@ -12,7 +12,7 @@ function store(initial: Record<string, string> = {}) {
 }
 
 test("the stored tab reads back", () => {
-  for (const tab of ["members", "events", "files"] as SideTab[]) {
+  for (const tab of ["members", "events", "files", "board"] as SideTab[]) {
     const s = store();
     writeSideTab(s, tab);
     assert.equal(readSideTab(s), tab);

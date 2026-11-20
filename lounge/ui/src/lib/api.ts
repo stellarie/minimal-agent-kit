@@ -112,6 +112,20 @@ export interface ThreadDraft {
   cwd: string;
 }
 
+export interface BoardItem {
+  id: string;
+  done: boolean;
+  text: string;
+  owner: string;
+  files?: string;
+  result?: string;
+}
+
+// One .kit/tasks/*.md file: parsed, or raw text with a warning.
+export type BoardTask =
+  | { ok: true; name: string; title: string; status: string; owner: string; updated: string; items: BoardItem[] }
+  | { ok: false; name: string; raw: string; warning: string };
+
 // What one agent works on now.
 export interface WorkState {
   agent: Agent;
@@ -349,6 +363,8 @@ export interface LoungeClient {
   threads(): Promise<ThreadInfo[]>;
   startThread(draft: ThreadDraft): Promise<ThreadInfo>;
   stopThread(id: string): Promise<{ stopped: number }>;
+  // Read only: the task files of the thread folder.
+  blackboard(threadId: string): Promise<BoardTask[]>;
   work(): Promise<WorkState[]>;
   who(): Promise<Presence[]>;
   scheduler(): Promise<SchedulerStatus>;
@@ -516,6 +532,11 @@ export function createHttpClient(token: string): LoungeClient {
 
     stopThread(id) {
       return call<{ stopped: number }>(`/api/threads/${encodeURIComponent(id)}/stop`, { method: "POST" });
+    },
+
+    async blackboard(threadId) {
+      const body = await call<{ tasks: BoardTask[] }>(`/api/threads/${encodeURIComponent(threadId)}/blackboard`);
+      return body.tasks;
     },
 
     work() {

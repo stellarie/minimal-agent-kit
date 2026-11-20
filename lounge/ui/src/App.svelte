@@ -25,6 +25,7 @@
   import EventsPanel from "./components/EventsPanel.svelte";
   import SideTabs from "./components/SideTabs.svelte";
   import FilesPanel from "./components/FilesPanel.svelte";
+  import BlackboardPanel from "./components/BlackboardPanel.svelte";
   import FilePreview from "./components/FilePreview.svelte";
   import MessageRow from "./components/MessageRow.svelte";
   import ChannelList from "./components/ChannelList.svelte";
@@ -849,6 +850,8 @@
           />
         {:else if sideTab === "events"}
           <EventsPanel {events} {channels} {current} onCreate={createEvent} onCancel={cancelEvent} />
+        {:else if sideTab === "board"}
+          <BlackboardPanel {client} threadId={thread?.id} />
         {:else}
           <FilesPanel
             {client}
