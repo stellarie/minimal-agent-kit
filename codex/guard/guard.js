@@ -6,7 +6,13 @@
 // lounge queue. Outside it, an ask in a mode that cannot prompt
 // denies. Every failure denies: a hook that cannot judge must
 // not allow.
+// A relaxed session (a marker file for its id) prints nothing for an ask.
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { judge, toAction } from "./rules.js";
+
+const RELAX_DIR = join(homedir(), ".agent-kit", "guard-relax");
 
 const WAIT_MS = 580_000;
 const SHELL_TOOLS = new Set(["Bash", "PowerShell", "shell", "exec_command", "local_shell"]);
@@ -48,6 +54,17 @@ function actionOf(event) {
   return command === undefined ? undefined : toAction("Bash", { command }, cwd);
 }
 
+// The human relaxes one session with an empty file named for its id. Any doubt is false.
+function relaxed(event) {
+  const id = event.session_id;
+  if (typeof id !== "string" || !/^[\w-]{8,128}$/.test(id)) return false;
+  try {
+    return existsSync(join(RELAX_DIR, id));
+  } catch {
+    return false;
+  }
+}
+
 // The lounge core decides an ask. A queue that cannot answer denies.
 async function queue(event, env) {
   if (!env.LOUNGE_GUARD_TOKEN) return ["deny", "the turn has no guard token"];
@@ -84,6 +101,7 @@ async function main(env = process.env) {
   let decision = DECISION[verdict?.verdict] ?? "deny";
   let reason = verdict?.reason ?? "no rule matched";
   if (decision === "ask" && env.LOUNGE_GUARD_URL) [decision, reason] = await queue(event, env);
+  else if (decision === "ask" && relaxed(event)) return;
   else if (decision === "ask" && NO_PROMPT_MODES.has(event.permission_mode)) {
     [decision, reason] = ["deny", `${reason}. This mode cannot prompt: ask the human to run it`];
   }

@@ -70,6 +70,10 @@ const GUARD_WRITE = new RegExp(
   "i",
 );
 
+// A shell that names the relax marker folder asks, so an agent cannot relax itself.
+// The name is caught after a cd too.
+const RELAX_DIR_TEXT = /\.agent-kit[\\/]+guard-relax\b/i;
+
 // Tested on the text with quotes and string joins removed.
 // A true fourth value keeps the entry for a read-only shell. "ask" keeps it at ask.
 const GUARD_TEXT = [
@@ -77,6 +81,7 @@ const GUARD_TEXT = [
   [/\.claude[\\/]+settings[\w.-]*\.json/i, "ask", "touches Claude settings, where the guard hook lives"],
   [/\.agent-lounge(?![\\/]+attachments\b(?![^\s;|&]*[\\/]\.\.))/i, "ask", "touches the lounge home", true],
   [GUARD_WRITE, "ask", "writes to or deletes the guard code", true],
+  [RELAX_DIR_TEXT, "ask", "touches the guard relax markers"],
   [/[\\/][^\\/\s]{1,6}~\d/, "ask", "uses a short 8.3 path name", true],
 ];
 
@@ -1914,6 +1919,7 @@ function judgeWrite(raw, content, cwd, o) {
     return { verdict: "ask", reason: `write to Claude settings, where the guard hook lives: ${p}` };
   }
   if (/\\guard\\(guard|rules)\.js$/.test(p)) return { verdict: "ask", reason: `write to the guard code: ${p}` };
+  if (/\\\.agent-kit\\guard-relax(\\|$)/.test(p)) return { verdict: "ask", reason: `write to the guard relax markers: ${p}` };
   if (/\\profiles\\[^\\]+\\cordis[\w.-]*\.ya?ml$/.test(p)) return { verdict: "ask", reason: `write to a DSH profile: ${p}` };
   if (sensitiveText(p)) return { verdict: "ask", reason: `writes a sensitive file: ${p}` };
   if (/~\d/.test(p)) return { verdict: "ask", reason: `write through a short 8.3 name: ${p}` };

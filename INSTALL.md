@@ -115,6 +115,16 @@ For Claude Code, after the restart:
 - Run the Bash call `git reset --hard --help`. It is harmless, but it matches a deny rule. Expect a `guard: git reset --hard discards work` message.
 - Never test the hook with a real destructive command.
 
+## 4b. Relax the guard for one session (optional)
+
+Only the human does this. Never create the file yourself.
+
+1. The human finds the session id. It is the `session_id` field of the hook event.
+2. The human creates an empty file `%USERPROFILE%\.agent-kit\guard-relax\<session id>` by hand.
+3. In that session, a guard ask prints nothing. The harness decides: in bypass mode the call runs, and in default mode the harness prompts.
+4. A guard deny stays a deny.
+5. To end the relax, the human deletes the file or starts a new session.
+
 ## 5. Set up a project (optional)
 
 In a project that uses the kit, ignore the `.kit/` folder:

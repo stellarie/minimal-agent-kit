@@ -261,6 +261,40 @@ class GuardClaims(unittest.TestCase):
     def test_c1_1_ask_dontask_denies(self):
         self.assertEqual(run({**bash(ASK), "permission_mode": "dontAsk"})[0], "deny")
 
+    def relax_home(self, *sessions):
+        """Make a temp home with a relax marker for each session. Return its env."""
+        home = tempfile.TemporaryDirectory()
+        self.addCleanup(home.cleanup)
+        markers = pathlib.Path(home.name) / ".agent-kit" / "guard-relax"
+        markers.mkdir(parents=True)
+        for session in sessions:
+            (markers / session).touch()
+        return {"USERPROFILE": home.name, "HOME": home.name}
+
+    def relax_event(self, command, session):
+        return {**bash(command), "session_id": session, "permission_mode": "bypassPermissions"}
+
+    def test_relax_ask_neutral(self):
+        env = self.relax_home("relax-test-1")
+        self.assertEqual(run(self.relax_event(ASK, "relax-test-1"), env), (None, {}))
+
+    def test_relax_block_denies(self):
+        env = self.relax_home("relax-test-1")
+        self.assertEqual(run(self.relax_event("git reset --hard", "relax-test-1"), env)[0], "deny")
+
+    def test_relax_other_session_denies(self):
+        env = self.relax_home("relax-test-1")
+        self.assertEqual(run(self.relax_event(ASK, "relax-test-2"), env)[0], "deny")
+
+    def test_relax_bad_id_denies(self):
+        env = self.relax_home("relax-test-1")
+        self.assertEqual(run(self.relax_event(ASK, "../x"), env)[0], "deny")
+
+    def test_relax_marker_write_asks(self):
+        env = self.relax_home()
+        marker = pathlib.Path(env["HOME"]) / ".agent-kit" / "guard-relax" / "abc12345"
+        self.assertEqual(run(bash(f"echo x > {marker}"), env)[0], "ask")
+
     def test_c1_1_bad_json(self):
         for text in ["not json", "", "null", "[]"]:
             with self.subTest(text=text):
