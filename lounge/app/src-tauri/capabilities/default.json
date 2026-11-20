@@ -1,0 +1,14 @@
+{
+  "identifier": "default",
+  "description": "Main lounge window and the core page it loads",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://127.0.0.1:*"]
+  },
+  "permissions": [
+    "core:default",
+    "notification:allow-notify",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission"
+  ]
+}

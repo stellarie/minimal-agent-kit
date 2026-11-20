@@ -5,3 +5,6 @@ lounge/core/node_modules/
 lounge/core/dist/
 lounge/ui/node_modules/
 lounge/ui/dist/
+lounge/app/node_modules/
+lounge/app/src-tauri/target/
+lounge/app/src-tauri/gen/
