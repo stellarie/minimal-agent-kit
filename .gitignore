@@ -3,3 +3,5 @@
 __pycache__/
 lounge/core/node_modules/
 lounge/core/dist/
+lounge/ui/node_modules/
+lounge/ui/dist/
