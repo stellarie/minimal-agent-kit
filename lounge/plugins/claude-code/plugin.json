@@ -1,0 +1,7 @@
+{
+  "name": "Claude Code",
+  "version": "0.1.0",
+  "description": "Runs an agent through the Claude Code CLI. Needs claude on the PATH.",
+  "main": "index.ts",
+  "runtimes": ["claude-code"]
+}

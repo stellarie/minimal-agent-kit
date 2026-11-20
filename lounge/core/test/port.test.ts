@@ -96,7 +96,9 @@ test("c2_1: every relative import resolves, and none reaches a dropped module", 
     for (const match of text.matchAll(spec)) {
       const target = resolve(dirname(file), match[1]!);
       if (!existsSync(target)) broken.push(`${relative(CORE, file)} -> ${match[1]}`);
-      if (relative(CORE, target).startsWith("..")) outside.add(relative(KIT, target).replaceAll("\\", "/"));
+      // A test may import the plugins that ship with the lounge.
+      const shipped = relative(CORE, file).startsWith("test") && relative(KIT, target).startsWith("lounge");
+      if (relative(CORE, target).startsWith("..") && !shipped) outside.add(relative(KIT, target).replaceAll("\\", "/"));
     }
   }
   assert.deepEqual(broken, []);
