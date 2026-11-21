@@ -81,12 +81,34 @@ class ReleaseBehaviour(unittest.TestCase):
     def git(self, *args):
         subprocess.run(["git", *args], cwd=self.tmp, check=True, capture_output=True)
 
-    def run_tool(self, name):
-        args = [sys.executable, "-X", "utf8", str(self.tmp / "tools" / name)]
-        return subprocess.run(args, cwd=self.tmp, capture_output=True, text=True)
+    def run_tool(self, name, *extra, env=None):
+        args = [sys.executable, "-X", "utf8", str(self.tmp / "tools" / name), *extra]
+        return subprocess.run(args, cwd=self.tmp, capture_output=True, text=True, env=env)
 
-    def release(self):
-        return self.run_tool("release.py")
+    def release(self, *extra, env=None):
+        return self.run_tool("release.py", *extra, env=env)
+
+    def fake_tools(self):
+        """Put minisign and gh stand-ins first on PATH. Return the environment and the call log."""
+        bin_dir = self.tmp / "fakebin"
+        bin_dir.mkdir()
+        log = self.tmp / "calls.log"
+        fake = bin_dir / "fake.py"
+        fake.write_text(
+            "import json, os, sys\n"
+            "with open(os.environ['FAKE_LOG'], 'a', encoding='utf-8') as f:\n"
+            "    f.write(json.dumps(sys.argv[1:]) + '\\n')\n",
+            encoding="utf-8",
+        )
+        for name in ("minisign", "gh"):
+            if os.name == "nt":
+                (bin_dir / f"{name}.cmd").write_text(f'@"{sys.executable}" "{fake}" {name} %*\n', encoding="utf-8")
+            else:
+                script = bin_dir / name
+                script.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{fake}" {name} "$@"\n', encoding="utf-8")
+                script.chmod(0o755)
+        env = {**os.environ, "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"], "FAKE_LOG": str(log)}
+        return env, log
 
     def names(self, zip_rel):
         with zipfile.ZipFile(self.tmp / zip_rel) as z:
@@ -165,6 +187,47 @@ class ReleaseBehaviour(unittest.TestCase):
         result = self.release()
         self.assertEqual(result.returncode, 1)
         self.assertFalse((self.tmp / "dist").exists())
+
+    def test_c8_2_lounge_zip_holds_update_pub(self):
+        write(self.tmp, "lounge/update.pub")
+        self.git("add", "-A")
+        self.assertEqual(self.release().returncode, 0)
+        self.assertIn("lounge/update.pub", self.names(LOUNGE_ZIP))
+        self.assertNotIn("lounge/update.pub", self.names(KIT_ZIP))
+
+    def test_c8_1_publish_commands_sign_both_zips_then_create_the_release(self):
+        write(self.tmp, "lounge/update.pub")
+        self.git("add", "-A")
+        env, log = self.fake_tools()
+        result = self.release("--publish", "--key", "k.key", env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        kit = f"dist/minimal-agent-kit-{VERSION}.zip"
+        lounge = f"dist/minimal-agent-kit-lounge-{VERSION}-windows.zip"
+        tag = f"v{VERSION}"
+        calls = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(
+            calls,
+            [
+                ["minisign", "-S", "-s", "k.key", "-m", kit],
+                ["minisign", "-S", "-s", "k.key", "-m", lounge],
+                ["gh", "release", "create", tag, kit, lounge, kit + ".minisig", lounge + ".minisig", "--title", tag],
+            ],
+        )
+
+    def test_c8_1_publish_without_update_pub_stops_before_any_command(self):
+        env, log = self.fake_tools()
+        result = self.release("--publish", "--key", "k.key", env=env)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("update.pub", result.stderr)
+        self.assertFalse(log.exists())
+        self.assertFalse((self.tmp / "dist").exists())
+
+    def test_c8_1_without_publish_no_command_runs(self):
+        write(self.tmp, "lounge/update.pub")
+        self.git("add", "-A")
+        env, log = self.fake_tools()
+        self.assertEqual(self.release(env=env).returncode, 0)
+        self.assertFalse(log.exists())
 
     def test_c9_1_lounge_relative_paths_resolve_after_unzip(self):
         for rel in ("lounge/core/src", "lounge/plugins", "lounge/skills"):
