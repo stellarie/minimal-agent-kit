@@ -7,7 +7,8 @@ export const GUARD_MATCHER = "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|
 export const MODE_DISALLOWED = "Monitor,Tmux";
 // Native subagents bypass the agent graph: lounge_spawn replaces them.
 // Workflow too: the model reached it through ToolSearch.
-export const SUBAGENT_DISALLOWED = "Task,Workflow";
+// Claude Code 2.1 renamed Task to Agent: the name varies by version, so both stay.
+export const SUBAGENT_DISALLOWED = "Task,Agent,Workflow";
 
 // One value: a second --disallowedTools flag would replace the first.
 export function disallowedTools(toolMode: string | undefined): string {

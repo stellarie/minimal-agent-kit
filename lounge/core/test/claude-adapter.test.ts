@@ -378,7 +378,7 @@ test("C15_4: the claude-code kind disallows Task and Workflow in every mode, and
     const flags = argv.filter((a) => a.startsWith("--disallowedTools"));
     assert.equal(flags.length, 1, String(toolMode));
     // The = form: the space form takes the prompt as a tool name.
-    const want = toolMode === "full" || toolMode === undefined ? "Task,Workflow" : "Task,Workflow,Monitor,Tmux";
+    const want = toolMode === "full" || toolMode === undefined ? "Task,Agent,Workflow" : "Task,Agent,Workflow,Monitor,Tmux";
     assert.equal(flags[0], `--disallowedTools=${want}`, String(toolMode));
   }
 });

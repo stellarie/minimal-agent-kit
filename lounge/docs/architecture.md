@@ -86,7 +86,7 @@ flowchart TD
 - When the lead of a child ends a turn with no pending turn, the core posts the final reply into the parent. It mentions the spawner.
 - A stop cascades to every descendant. A stopped child never resumes. Stop marks live in memory, so they hold for one core run.
 - The agent graph tab shows the thread tree with live status.
-- Native subagents are off, so each child shows in the graph. Claude runs with `--disallowedTools=Task,Workflow`. A Codex hook denies the `collaborationspawn_agent` tool.
+- Native subagents are off, so each child shows in the graph. Claude runs with `--disallowedTools=Task,Agent,Workflow`. A Codex hook denies the `collaborationspawn_agent` tool.
 
 ## Harness isolation
 
