@@ -3,6 +3,7 @@ import { readdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { coreVersion } from "../version.ts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -168,7 +169,7 @@ function buildServer(identity: Identity, deps: McpDeps, connected: () => Set<Cal
   const { caller } = identity;
   const allowed = (action: Action): boolean =>
     can(identity, action) && (caller === "owner" || !deps.grants || deps.grants.allows(caller, action));
-  const server = new McpServer({ name: "agent-lounge", version: "0.1.0" });
+  const server = new McpServer({ name: "agent-lounge", version: coreVersion() });
   const add = server.registerTool.bind(server) as McpServer["registerTool"];
 
   const begin = (): void => {
