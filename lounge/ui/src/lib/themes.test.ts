@@ -10,6 +10,8 @@ import {
   PATTERNS,
   SAMPLES,
   contrastRatio,
+  exportThemes,
+  importThemes,
   lowContrast,
   minContrast,
   newThemeId,
@@ -170,4 +172,56 @@ test("themeVars sets colors, shadow, and the pattern", () => {
   assert.match(vars["--pattern"], /^url\("data:image\/svg\+xml,/);
   assert.equal(themeVars(theme("graphite"))["--pattern"], "none");
   assert.equal(Object.keys(vars).length, COLOR_KEYS.length + 2);
+});
+
+function sample(id: string, over: Partial<Theme> = {}): Theme {
+  return { id, name: `Theme ${id}`, dark: false, pattern: "grid", colors: SAMPLES[0].colors, custom: true, ...over };
+}
+
+test("c11_1: one theme object imports as one custom theme", () => {
+  const { custom, ...plain } = sample("mine");
+  const got = importThemes(JSON.stringify(plain), []);
+  assert.deepEqual(got, { ok: true, themes: [{ ...plain, custom: true }] });
+});
+
+test("c11_1: an array imports each valid theme, and a taken id gets a new one", () => {
+  const saved = [sample("custom-1"), sample("custom-2")];
+  const text = JSON.stringify([sample("custom-1", { name: "Clash" }), { id: "x", name: "Bad" }, sample("ledger", { name: "Sample id" })]);
+  const got = importThemes(text, saved);
+  assert.ok(got.ok);
+  assert.deepEqual(got.themes.map((t) => [t.id, t.name]), [
+    ["custom-1", "Theme custom-1"],
+    ["custom-2", "Theme custom-2"],
+    ["custom-3", "Clash"],
+    ["custom-4", "Sample id"],
+  ]);
+});
+
+test("c11_1: invalid JSON gives an error and no change", () => {
+  const got = importThemes("{ nope", [sample("a")]);
+  assert.deepEqual(got, { ok: false, error: "The text is not JSON." });
+});
+
+test("c11_1: input with no valid theme gives an error", () => {
+  assert.deepEqual(importThemes("[]", []), { ok: false, error: "No valid theme in the text." });
+  assert.deepEqual(importThemes('{"id":"a","name":"x","colors":{}}', []), { ok: false, error: "No valid theme in the text." });
+  assert.deepEqual(importThemes("5", []), { ok: false, error: "No valid theme in the text." });
+});
+
+test("c11_1: an import past 30 themes gives an error and no change", () => {
+  const many = (n: number, from = 0) => Array.from({ length: n }, (_, i) => sample(`t${from + i}`));
+  const error = { ok: false, error: "At most 30 custom themes." };
+  assert.deepEqual(importThemes(JSON.stringify(many(2)), many(29, 100)), error);
+  assert.deepEqual(importThemes(JSON.stringify(many(31)), []), error);
+  const fits = importThemes(JSON.stringify(many(1)), many(29, 100));
+  assert.ok(fits.ok && fits.themes.length === 30);
+});
+
+test("c11_2: exportThemes gives JSON without the custom flag that importThemes reads back", () => {
+  const saved = [sample("a"), sample("b", { dark: true })];
+  const text = exportThemes(saved);
+  assert.ok(!text.includes("custom"));
+  assert.deepEqual(JSON.parse(text).map((t: Theme) => t.id), ["a", "b"]);
+  const back = importThemes(text, []);
+  assert.deepEqual(back, { ok: true, themes: saved });
 });

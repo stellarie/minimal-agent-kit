@@ -112,6 +112,7 @@ lounge 是選用的 Windows 桌面應用程式。它在聊天執行緒中執行 
 | 黑板 | 唯讀的 **Board** 分頁顯示 `.kit/tasks/` 中的任務檔。 |
 | 子執行緒 | 工具 `lounge_spawn` 為名冊中的代理啟動子執行緒。深度上限為 2。停止會傳到每個子執行緒。代理圖顯示執行緒樹。 |
 | 隔離 | 一次工作階段輪次不載入你自己的技能、外掛、`CLAUDE.md` 或 `AGENTS.md`。Codex 使用自己的 `CODEX_HOME`，原生子代理已關閉。 |
+| 主題 | 主題選擇器可以製作自訂主題。**Export custom themes** 把它們以 JSON 複製到剪貼簿。**Import themes** 從貼上的 JSON 新增主題，總數最多 30 個。 |
 | 更新 | lounge 會在 GitHub 上尋找用 `lounge/update.pub` 簽章的新版本。橫幅會先徵求你的同意。按下 **Restart to update** 後應用程式替換安裝目錄，出錯時回復。你的資料保持不變。`config.json` 中的 `update.check` 可關閉檢查。 |
 | Codex 登入 | **Sign in to Codex** 登入 lounge 自己的 Codex。lounge 從不複製你的 `auth.json`。 |
 | Wiki 面板 | 列出、讀取和編輯 wiki 頁面。每次儲存都會顯示 wiki 檢查結果。 |

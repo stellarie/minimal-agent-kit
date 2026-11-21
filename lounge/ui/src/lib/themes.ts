@@ -177,6 +177,35 @@ export function newThemeId(taken: readonly Theme[]): string {
   return `custom-${n}`;
 }
 
+export type ImportResult = { ok: true; themes: Theme[] } | { ok: false; error: string };
+
+// Reads one theme or a list of themes from text. The result holds the saved themes and the new ones.
+// A new theme whose id is taken gets a new id. Nothing changes on an error.
+export function importThemes(text: string, saved: readonly Theme[]): ImportResult {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return { ok: false, error: "The text is not JSON." };
+  }
+  const list = Array.isArray(data) ? data : [data];
+  const tooMany: ImportResult = { ok: false, error: `At most ${MAX_THEMES} custom themes.` };
+  if (list.length > MAX_THEMES) return tooMany;
+  const got = parseCustom(JSON.stringify(list));
+  if (got.length === 0) return { ok: false, error: "No valid theme in the text." };
+  if (saved.length + got.length > MAX_THEMES) return tooMany;
+  const all: Theme[] = [...saved];
+  for (const theme of got) {
+    const clash = SAMPLES.some((t) => t.id === theme.id) || all.some((t) => t.id === theme.id);
+    all.push(clash ? { ...theme, id: newThemeId(all) } : theme);
+  }
+  return { ok: true, themes: all };
+}
+
+export function exportThemes(saved: readonly Theme[]): string {
+  return JSON.stringify(saved.map(({ custom: _custom, ...theme }) => theme), null, 2);
+}
+
 // WCAG relative luminance of a #rrggbb color.
 function luminance(hex: string): number {
   const channel = (i: number) => {

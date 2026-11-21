@@ -9,6 +9,8 @@
     PATTERN_LABELS,
     SAMPLES,
     SYSTEM,
+    exportThemes,
+    importThemes,
     lowContrast,
     newThemeId,
     parseCustom,
@@ -26,6 +28,9 @@
   let chosen = $state(SYSTEM);
   let custom = $state<Theme[]>([]);
   let draft = $state<Theme | null>(null);
+  let importing = $state(false);
+  let importText = $state("");
+  let notice = $state("");
   let applied: string[] = [];
   let panel = $state<HTMLElement>();
 
@@ -90,6 +95,32 @@
     custom = custom.filter((t) => t.id !== theme.id);
     saveCustom();
     if (chosen === theme.id) choose(SYSTEM);
+  }
+
+  async function exportAll() {
+    try {
+      await navigator.clipboard.writeText(exportThemes(custom));
+      notice = `Copied ${count(custom.length)} to the clipboard.`;
+    } catch {
+      notice = "The browser did not allow the copy.";
+    }
+  }
+
+  function runImport() {
+    const got = importThemes(importText, custom);
+    if (!got.ok) {
+      notice = got.error;
+      return;
+    }
+    notice = `Imported ${count(got.themes.length - custom.length)}.`;
+    custom = got.themes;
+    saveCustom();
+    importText = "";
+    importing = false;
+  }
+
+  function count(n: number): string {
+    return `${n} ${n === 1 ? "theme" : "themes"}`;
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -196,6 +227,18 @@
         <button class="btn new" type="button" disabled={custom.length >= MAX_THEMES} onclick={startNew}>
           + New theme from this one
         </button>
+        <div class="transfer">
+          <button class="btn btn--soft" type="button" disabled={custom.length === 0} onclick={exportAll}>Export custom themes</button>
+          <button class="btn btn--soft" type="button" aria-expanded={importing} onclick={() => (importing = !importing)}>Import themes</button>
+        </div>
+        {#if importing}
+          <label class="line">
+            <span>Paste theme JSON</span>
+            <textarea class="field" rows="6" bind:value={importText}></textarea>
+          </label>
+          <button class="btn" type="button" disabled={importText.trim() === ""} onclick={runImport}>Add themes</button>
+        {/if}
+        {#if notice}<p class="contrast" role="status">{notice}</p>{/if}
       {/if}
     </div>
   {/if}
@@ -262,6 +305,8 @@
     cursor: pointer;
   }
   .new { width: 100%; }
+  .transfer { display: flex; gap: 8px; margin: 8px 0; }
+  .transfer .btn { flex: 1; }
   h2 { margin: 0 0 10px; font-size: 1rem; }
   .line { display: grid; gap: 4px; margin-bottom: 8px; font-weight: 600; font-size: .85rem; }
   .line .field { padding: 6px 10px; border-radius: var(--r); font-weight: 400; }

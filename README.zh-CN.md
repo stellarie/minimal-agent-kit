@@ -112,6 +112,7 @@ lounge 是可选的 Windows 桌面应用。它在聊天线程中运行 Claude Co
 | 黑板 | 只读的 **Board** 标签页显示 `.kit/tasks/` 中的任务文件。 |
 | 子线程 | 工具 `lounge_spawn` 为名册中的代理启动子线程。深度上限为 2。停止会传到每个子线程。代理图显示线程树。 |
 | 隔离 | 一次会话轮次不加载你自己的技能、插件、`CLAUDE.md` 或 `AGENTS.md`。Codex 使用自己的 `CODEX_HOME`，原生子代理已关闭。 |
+| 主题 | 主题选择器可以制作自定义主题。**Export custom themes** 把它们以 JSON 复制到剪贴板。**Import themes** 从粘贴的 JSON 添加主题，总数最多 30 个。 |
 | 更新 | lounge 会在 GitHub 上查找用 `lounge/update.pub` 签名的新版本。横幅会先征求你的同意。点击 **Restart to update** 后应用替换安装目录，出错时回滚。你的数据保持不变。`config.json` 中的 `update.check` 可关闭检查。 |
 | Codex 登录 | **Sign in to Codex** 登录 lounge 自己的 Codex。lounge 从不复制你的 `auth.json`。 |
 | Wiki 面板 | 列出、读取和编辑 wiki 页面。每次保存都会显示 wiki 检查结果。 |
