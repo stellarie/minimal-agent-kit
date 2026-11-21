@@ -46,9 +46,14 @@ export interface SchedulerConfig {
   maxConcurrent: number;
 }
 
+export interface UpdateConfig {
+  check: boolean;
+}
+
 export interface LoungeConfig {
   host: string;
   port: number;
+  update: UpdateConfig;
   // Seed input for the first start only.
   // The roster table owns the rows after that.
   adapters: Record<SeedAgent, AdapterConfig>;
@@ -68,6 +73,7 @@ export function defaultConfig(): LoungeConfig {
   return {
     host: DEFAULT_HOST,
     port: DEFAULT_PORT,
+    update: { check: true },
     adapters: {
       ada: { enabled: true, command: "claude", commandArgs: [], softMs: 60_000, hardMs: 180_000 },
       bea: { enabled: false },
@@ -154,6 +160,11 @@ function parseAdapter(
   return out;
 }
 
+function parseUpdate(raw: Partial<UpdateConfig> | undefined, base: UpdateConfig, file: string): UpdateConfig {
+  if (raw?.check !== undefined && typeof raw.check !== "boolean") throw new Error(`invalid update.check in ${file}`);
+  return { check: raw?.check ?? base.check };
+}
+
 function parseSessions(
   raw: Partial<SessionConfig> | undefined,
   base: SessionConfig,
@@ -225,6 +236,7 @@ export function loadConfig(home: string): LoungeConfig {
   const config: LoungeConfig = {
     host: raw.host ?? defaults.host,
     port: raw.port ?? defaults.port,
+    update: parseUpdate(raw.update, defaults.update, file),
     adapters: { ...defaults.adapters },
     sessions: parseSessions(raw.sessions, defaults.sessions, file),
     scheduler: parseScheduler(raw.scheduler, defaults.scheduler, file),
