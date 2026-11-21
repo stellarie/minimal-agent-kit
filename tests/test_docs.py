@@ -63,6 +63,18 @@ class DocsContent(unittest.TestCase):
             with self.subTest(part):
                 self.assertIn(part, text)
 
+    def test_c9_1_given_install_and_readmes_when_read_then_each_names_the_update_flow(self):
+        for rel in ["INSTALL.md"] + READMES:
+            for word in ["Restart to update", "update.check", "lounge/update.pub"]:
+                with self.subTest(rel=rel, word=word):
+                    self.assertIn(word, read(rel))
+
+    def test_c9_1_given_the_architecture_page_when_read_then_it_covers_the_update_flow(self):
+        text = read("lounge/docs/architecture.md")
+        for part in ["minisign", "update.pub", "apply.json", "rollback", "minisign -G", "release.py --publish"]:
+            with self.subTest(part):
+                self.assertIn(part, text)
+
     def test_c10_1_given_the_codex_hook_doc_when_read_then_it_names_node_guard_js_and_the_timeout(self):
         text = read("codex/hooks.md")
         self.assertIn("node", text)

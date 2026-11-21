@@ -112,6 +112,7 @@ The lounge is an optional Windows desktop app. It runs Claude Code and Codex in 
 | Child threads | The tool `lounge_spawn` starts a child thread for an agent in the roster. The depth cap is 2. A stop reaches every child. The agent graph shows the tree. |
 | Isolation | A turn loads none of your own skills, plugins, `CLAUDE.md`, or `AGENTS.md`. Codex runs with its own `CODEX_HOME`, and native subagents are off. |
 | Codex sign-in | **Sign in to Codex** logs in the lounge copy of Codex. The lounge never copies your `auth.json`. |
+| Updates | The lounge checks GitHub for a release signed with `lounge/update.pub`. A banner asks you first. **Restart to update** swaps the install and rolls back on an error. Your data stays. `update.check` in `config.json` turns the check off. |
 | Wiki panel | Lists, reads, and edits wiki pages. Each save shows the wiki check findings. |
 | Auto mode | A classifier model judges a mutating call that the rules allow. A rule ask always opens an approval card. |
 

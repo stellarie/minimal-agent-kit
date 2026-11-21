@@ -132,6 +132,18 @@ To build the zips from source, you need the Rust toolchain. Build the three part
 
 `release.py` always writes the kit zip. It stops with an error when `agent-lounge.exe`, `lounge/ui/dist`, or `lounge/core/node_modules` is missing, and then it writes no lounge zip. See [lounge/docs/architecture.md](lounge/docs/architecture.md).
 
+The lounge zip also holds `lounge/update.pub`, the public key that checks updates. `python tools/release.py --publish --key <secret key path>` signs both zips with minisign and creates the GitHub release. It stops when `lounge/update.pub` is not tracked. Make the key once with `minisign -G -p lounge/update.pub -s <secret key path>` and commit the public key.
+
+### Update the lounge
+
+The lounge checks GitHub for a newer signed release at start and every 6 hours. An update never starts without a click.
+
+1. A banner shows **Update <ver> available**. Click **Download**. The lounge verifies the signature with `lounge/update.pub`.
+2. Click **Restart to update**. The app swaps the install and starts the new version.
+3. If the swap fails, the app restores the old install. Your data in `%USERPROFILE%\.agent-lounge` stays as it was.
+
+Set `update.check` to `false` in `config.json` to turn the check off. The key is `{"update": {"check": false}}`.
+
 ## 4. Verify
 
 Run the guard on one destructive and one safe command:

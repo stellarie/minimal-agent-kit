@@ -101,6 +101,39 @@ A lounge turn sees only lounge skills and the files that the context builder ins
 - **Sign in to Codex** in the app runs `codex login` once with the lounge `CODEX_HOME`. A turn without a login stops with a clear error.
 - The Claude hook matcher covers `Bash`, `PowerShell`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Read`, `Glob`, and `Grep`. The Codex hook matcher is `^Bash$`.
 
+## Update
+
+The lounge finds a newer release on GitHub, asks you, and swaps the install on restart. It never updates by itself.
+
+```mermaid
+flowchart LR
+  check["core: check<br/>start + every 6 h"] -->|newer tag| banner["banner:<br/>Update available"]
+  banner -->|Download| stage["core: download,<br/>verify, extract"]
+  stage -->|ready.json| ready["banner:<br/>Restart to update"]
+  ready -->|apply| marker["apply.json,<br/>core exits"]
+  marker --> swap["app: swap,<br/>rollback on error"]
+  swap --> run["new agent-lounge.exe"]
+```
+
+1. **Check.** The core asks `releases/latest` of the kit repository at start and every 6 hours. A tag `v<major>.<minor>.<patch>` that is greater than the installed version makes the state `available`. A 404 means no release. The config key `update.check` turns the check off. The default is `true`.
+2. **Download.** **Download** in the banner starts it. The core fetches `minimal-agent-kit-lounge-<ver>-windows.zip` and its `.minisig` file.
+3. **Verify.** The core checks a minisign signature with `lounge/update.pub` of the installed lounge. The key must make a prehashed (`ED`) signature. The trusted comment must verify too. Any failure stops the update and removes the staged files. The core uses only `node:crypto`.
+4. **Stage.** `tar.exe` extracts the zip into `<home>\updates\<ver>\root`. The staged `lounge/core/package.json` must hold the same version as the tag. The core then writes `ready.json`. These files are the only writes of the core into the lounge home for an update.
+5. **Apply.** **Restart to update** calls `POST /api/update/apply`. Only the owner token may call it. The core writes `<home>\updates\apply.json` and exits.
+6. **Swap.** The app finds the marker and deletes it first, so a failed swap cannot repeat. The app copies the staged root to `<install>\.new\<ver>`. It then moves each top-level entry of the staged root into the install, and the old entry into `<install>\.old\<time>`. The app starts the new `agent-lounge.exe` and exits.
+7. **Rollback.** If one move fails, the app moves every entry back, shows the error, and keeps the old core running.
+8. **Cleanup.** The next start removes `.old` and `.new`. A locked `.old` stays until a later start. The app also sets its working folder to the lounge home, so the install folder can move.
+
+A build from source, not from the zip, does not swap. The app refuses when its folder is not `lounge/` with `core/src/main.ts` beside it. Your data in the lounge home stays as it was.
+
+To publish a release:
+
+1. Make a key pair once: `minisign -G -p lounge/update.pub -s <secret key path>`. Commit `lounge/update.pub`. Keep the secret key outside the repository.
+2. Build the exe, `lounge/ui/dist`, and `lounge/core/node_modules`. Raise the version in every manifest. `tests/test_versions.py` checks that they match.
+3. Run `python tools/release.py --publish --key <secret key path>`. It writes both zips, signs each with minisign, and runs `gh release create v<ver>` with the zips and the `.minisig` files. It stops before any command when `lounge/update.pub` is not tracked.
+
+A new key needs a manual install, because the installed `update.pub` verifies each update.
+
 ## Wiki
 
 The wiki panel lists, reads, and edits pages in the wiki folder. The folder rule matches the kit session hook. Each save returns the `wiki_check.py` findings. A finding that did not run, such as a missing `python`, shows as `not-run`.
