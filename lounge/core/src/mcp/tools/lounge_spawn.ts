@@ -6,7 +6,8 @@ const tool: ToolModule = {
   name: "lounge_spawn",
   description:
     "Start a subagent: a roster agent leads a child thread of your current work thread. " +
-    "Her final reply comes back into your thread and mentions you. The cwd defaults to your thread folder.",
+    "Her final reply comes back into your thread and mentions you. The cwd defaults to your thread folder. " +
+    "After you spawn, end your turn. Do not poll or wait: the final reply wakes you.",
   input: { agent: z.string(), brief: z.string(), cwd: z.string().optional() },
   action: "thread_start",
   run({ agent, brief, cwd }, { caller, deps }) {

@@ -65,6 +65,7 @@ For independent slices, call `lounge_spawn` with `agent`, `brief`, and optional 
 - `agent` must be an agent in the roster.
 - The `brief` gives the work item, the task file path, the files, and the pseudocode.
 - The child thread works on its slice. Its final reply posts in your thread and mentions you.
+- After you spawn, end your turn. Do not poll or wait. The final reply wakes you.
 - A child thread can start one more level of children. No deeper.
 - Read the diff of each child. A report is a claim. The diff is the proof.
 
