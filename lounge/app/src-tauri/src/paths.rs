@@ -31,6 +31,17 @@ fn resolve_core_entry(over: Option<OsString>, exe: Option<&Path>) -> PathBuf {
     }
 }
 
+pub fn install_root(exe: &Path) -> Result<PathBuf, String> {
+    let lounge = exe
+        .parent()
+        .filter(|dir| dir.file_name().is_some_and(|name| name == "lounge"))
+        .filter(|dir| dir.join("core").join("src").join("main.ts").is_file());
+    lounge
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
+        .ok_or_else(|| "this is not an installed lounge".to_string())
+}
+
 fn user_profile() -> PathBuf {
     env::var_os("USERPROFILE")
         .or_else(|| env::var_os("HOME"))

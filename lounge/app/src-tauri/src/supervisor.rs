@@ -11,7 +11,7 @@ use tauri::AppHandle;
 
 use crate::job::Job;
 use crate::tray;
-use crate::{health, paths, token};
+use crate::{health, paths, token, update};
 
 const DEFAULT_PORT: u16 = 47621;
 const POLL_EVERY: Duration = Duration::from_secs(2);
@@ -209,6 +209,7 @@ fn supervise(app: &AppHandle, shared: &Shared) {
     let home = paths::lounge_home();
     let entry = paths::core_entry();
     let port = read_port(&home);
+    prepare_update(&home, shared);
     let mut attempt = 0;
     let mut announced = false;
 
@@ -261,9 +262,48 @@ fn supervise(app: &AppHandle, shared: &Shared) {
         if shared.stopped() {
             return;
         }
+        if apply_update(app, &home, shared) {
+            return;
+        }
         shared.stop_child();
         thread::sleep(backoff(attempt));
         attempt = attempt.saturating_add(1);
+    }
+}
+
+fn prepare_update(home: &Path, shared: &Shared) {
+    let moved = fs::create_dir_all(home).and_then(|()| std::env::set_current_dir(home));
+    if let Err(err) = moved {
+        shared.set_error(format!("cannot leave the install folder: {err}"));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        update::cleanup(home, &exe);
+    }
+}
+
+fn apply_update(app: &AppHandle, home: &Path, shared: &Shared) -> bool {
+    let Some(marker) = update::take_marker(home) else {
+        return false;
+    };
+    let swapped = std::env::current_exe()
+        .map_err(|err| err.to_string())
+        .and_then(|exe| update::apply(home, &exe, &marker));
+    let new_exe = match swapped {
+        Ok(path) => path,
+        Err(err) => {
+            shared.set_error(format!("update failed, rolled back: {err}"));
+            return false;
+        }
+    };
+    match update::launch(&new_exe, home) {
+        Ok(()) => {
+            app.exit(0);
+            true
+        }
+        Err(err) => {
+            shared.set_error(format!("cannot start the updated lounge: {err}"));
+            false
+        }
     }
 }
 

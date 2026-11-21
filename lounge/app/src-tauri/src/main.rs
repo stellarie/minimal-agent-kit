@@ -8,6 +8,7 @@ mod supervisor;
 mod test_support;
 mod token;
 mod tray;
+mod update;
 
 use std::sync::Arc;
 
