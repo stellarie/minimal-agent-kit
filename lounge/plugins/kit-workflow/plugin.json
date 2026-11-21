@@ -1,7 +1,7 @@
 {
   "name": "Kit workflow",
   "version": "0.9.0",
-  "description": "The kit workflow skill with its verify scripts: design, plan check, implement, review, close. Needs Python 3 on the PATH.",
+  "description": "The kit workflow skill with its verify scripts. Needs Python 3 on the PATH.",
   "main": "index.ts",
   "skills": { "workflow": "../../../claude/skills/workflow" },
   "vars": { "VERIFY": "../../../claude/verify" }
