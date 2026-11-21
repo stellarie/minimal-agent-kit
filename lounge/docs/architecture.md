@@ -120,9 +120,9 @@ flowchart LR
 3. **Verify.** The core checks a minisign signature with `lounge/update.pub` of the installed lounge. The key must make a prehashed (`ED`) signature. The trusted comment must verify too. Any failure stops the update and removes the staged files. The core uses only `node:crypto`.
 4. **Stage.** `tar.exe` extracts the zip into `<home>\updates\<ver>\root`. The staged `lounge/core/package.json` must hold the same version as the tag. The core then writes `ready.json`. Before it stages, the core removes every other entry under `<home>\updates`, so old staged copies do not pile up. These files are the only writes of the core into the lounge home for an update.
 5. **Apply.** **Restart to update** calls `POST /api/update/apply`. Only the owner token may call it. The core writes `<home>\updates\apply.json` and exits.
-6. **Swap.** The app finds the marker and deletes it first, so a failed swap cannot repeat. The app copies the staged root to `<install>\.new\<ver>`. It then moves each top-level entry of the staged root into the install, and the old entry into `<install>\.old\<time>`. The app starts the new `agent-lounge.exe` and exits.
-7. **Rollback.** If one move fails, the app moves every entry back, shows the error, and keeps the old core running.
-8. **Cleanup.** The next start removes `.old` and `.new`. A locked `.old` stays until a later start. The app also sets its working folder to the lounge home, so the install folder can move.
+6. **Swap.** The app finds the marker and deletes it first, so a failed swap cannot repeat. The app refuses a marker whose version is not `N.N.N`. The app copies the staged root to `<install>\.new\<ver>`. It then moves each top-level entry of the staged root into the install, and the old entry into `<install>\.old\<time>`. The app starts the new `agent-lounge.exe` and exits.
+7. **Rollback.** If one move fails, the app moves every entry back, shows the error, and keeps the old core running. If a move back fails, the app logs the stuck paths, writes `.old\rollback-incomplete`, and shows "rollback incomplete" instead of "rolled back".
+8. **Cleanup.** The next start removes `.old` and `.new`, unless `.old\rollback-incomplete` exists. Then both stay for a manual repair. A locked `.old` stays until a later start. The app also sets its working folder to the lounge home, so the install folder can move.
 
 A build from source, not from the zip, does not swap. The app refuses when its folder is not `lounge/` with `core/src/main.ts` beside it. Your data in the lounge home stays as it was.
 

@@ -286,12 +286,16 @@ fn apply_update(app: &AppHandle, home: &Path, shared: &Shared) -> bool {
         return false;
     };
     let swapped = std::env::current_exe()
-        .map_err(|err| err.to_string())
+        .map_err(|err| update::ApplyError::Failed(err.to_string()))
         .and_then(|exe| update::apply(home, &exe, &marker));
     let new_exe = match swapped {
         Ok(path) => path,
-        Err(err) => {
+        Err(err @ update::ApplyError::Failed(_)) => {
             shared.set_error(format!("update failed, rolled back: {err}"));
+            return false;
+        }
+        Err(err @ update::ApplyError::RollbackIncomplete(_)) => {
+            shared.set_error(format!("update failed: {err}"));
             return false;
         }
     };
