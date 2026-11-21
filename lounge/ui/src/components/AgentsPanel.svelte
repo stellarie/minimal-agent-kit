@@ -3,6 +3,7 @@
   import { ApiError } from "../lib/api.ts";
   import type { AgentEntry, AgentPatch, AgentView, LoungeClient, NewAgent, RuntimeChoices } from "../lib/api.ts";
   import { nameOf } from "../lib/names.svelte.ts";
+  import { modelMode } from "../lib/modelChoice.ts";
   import { MODE_HELP, MODE_LABELS, NO_MODES_NOTE, defaultMode, modeChoices, type ToolMode } from "../lib/toolModes.ts";
   import { roster, setRoster, whoColor } from "../lib/roster.svelte.ts";
   import { RUNTIME_OPTION_KEYS, TAPE_SLOTS, capitalize, tapeVar, validId } from "../lib/roster.ts";
@@ -11,6 +12,7 @@
   let { client, onChange }: { client: LoungeClient; onChange: () => void } = $props();
 
   const NEW = "";
+  const CUSTOM = "__custom__";
 
   let selected = $state(NEW);
   let id = $state("");
@@ -18,6 +20,7 @@
   let runtime = $state("");
   let model = $state("");
   let effort = $state("");
+  let customModel = $state(false);
   let tape = $state<AgentEntry["tape"]>(1);
   let toolMode = $state<ToolMode>("full");
   let enabled = $state(true);
@@ -61,7 +64,30 @@
     }
   }
 
+  const modelSelect = $derived(customModel ? CUSTOM : modelMode(model, choices.models) === "custom" ? CUSTOM : model);
+
+  function onModelSelect(e: Event): void {
+    const value = (e.currentTarget as HTMLSelectElement).value;
+    customModel = value === CUSTOM;
+    if (!customModel) model = value;
+    void loadChoices();
+  }
+
+  async function refresh(): Promise<void> {
+    busy = true;
+    try {
+      await client.reloadPlugins();
+      await loadChoices();
+      onChange();
+    } catch (err) {
+      problem = reason(err);
+    } finally {
+      busy = false;
+    }
+  }
+
   function fill(e: AgentView | undefined): void {
+    customModel = false;
     problem = "";
     confirmRetire = false;
     if (e === undefined) {
@@ -232,11 +258,20 @@
 
         <label>
           <span>Model</span>
-          <input class="field" bind:value={model} list="model-hints" placeholder="Runtime default" autocomplete="off" />
-          <datalist id="model-hints">
-            {#each choices.models as m (m)}<option value={m}></option>{/each}
-          </datalist>
+          <select class="field" value={modelSelect} onchange={onModelSelect}>
+            <option value="">Runtime default</option>
+            {#each choices.models as m (m)}<option value={m}>{m}</option>{/each}
+            <option value={CUSTOM}>Custom…</option>
+          </select>
         </label>
+        {#if modelSelect === CUSTOM}
+          <label>
+            <span>Custom model</span>
+            <input class="field" bind:value={model} onchange={() => void loadChoices()} placeholder="Model name" autocomplete="off" />
+          </label>
+        {/if}
+        <button class="btn btn--soft refresh" type="button" disabled={busy} onclick={() => void refresh()}>Refresh</button>
+        <small class="hint">Refresh reads the model lists of Claude Code and Codex again.</small>
 
         {#if choices.efforts.length > 0}
           <label>
@@ -335,6 +370,7 @@
   .tape-row .field { flex: 1; }
   .hint { margin: 0; color: var(--muted); font-size: .8rem; font-weight: 400; }
   .hint.over { color: var(--pink-deep); }
+  .refresh { justify-self: start; }
   .row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
   .spacer { flex: 1; }
   @media (max-width: 799px) {

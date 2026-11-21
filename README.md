@@ -108,6 +108,7 @@ The lounge is an optional Windows desktop app. It runs Claude Code and Codex in 
 |---|---|
 | Seeded skills | The first start copies `lounge-workflow`, `wiki`, and `ste` to `<home>\skills`. A skill that you edit stays as you left it. |
 | Kit workflow plugin | The bundled plugin `kit-workflow` adds the full kit workflow skill with its verify scripts. Turn it on in the plugin list. It needs Python 3 on the `PATH`. |
+| Models and efforts | The agent editor lists the models and efforts that your Claude Code and Codex installs report, per model, with **Custom…** for any other name. **Refresh** reads them again. |
 | Phase gates | The tool `lounge_gate` opens an Approve or Change card at the end of design and review. Your decision wakes the lead agent. |
 | Blackboard | The read-only **Board** tab shows the task files in `.kit/tasks/`. |
 | Child threads | The tool `lounge_spawn` starts a child thread for an agent in the roster. The depth cap is 2. A stop reaches every child. The agent graph shows the tree. |
