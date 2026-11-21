@@ -107,7 +107,7 @@ flowchart TD
 - After you spawn, end your turn. Do not poll. The final reply of the child wakes you.
 - A stop cascades to every descendant. A stopped child never resumes. Stop marks live in memory, so they hold for one core run.
 - The agent graph tab shows the thread tree with live status.
-- Native subagents are off, so each child shows in the graph. Claude runs with `--disallowedTools=Task,Agent,Workflow`. A Codex hook denies every `collaboration*_agent` tool, and `collaborationsend_input` and `collaborationsend_message`.
+- Native subagents are off, so each child shows in the graph. Claude runs with `--disallowedTools=Task,Agent,Workflow`. A Codex hook denies every `collaboration*` tool, and denies the call when its input does not parse.
 
 ## Harness isolation
 

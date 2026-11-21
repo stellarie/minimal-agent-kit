@@ -43,12 +43,28 @@ test("c6_1: the no-subagents hook denies every collaboration agent tool, send_in
   }
 });
 
-test("c6_1: the no-subagents hook stays silent for other tools and bad input", () => {
-  assert.equal(hook({ tool_name: "collaborationnote", tool_input: {} }), "");
+test("c6_1: the no-subagents hook denies every tool the matcher sends, whatever its name", () => {
+  for (const tool_name of ["collaborationnote", "collaborationresume_agent", "collaboration", "collaborationfuture_tool"]) {
+    assert.ok(new RegExp(NO_SUBAGENTS_MATCHER).test(tool_name), tool_name);
+    const out = JSON.parse(hook({ tool_name, tool_input: {} }));
+    assert.equal(out.hookSpecificOutput.permissionDecision, "deny", tool_name);
+  }
+});
+
+test("c6_1: the no-subagents hook stays silent for tools the matcher does not send", () => {
   assert.equal(hook({ tool_name: "Bash", tool_input: { command: "echo collaborationspawn_agent" } }), "");
-  const run = spawnSync(process.execPath, [NO_SUBAGENTS_FILE], { input: "not json", encoding: "utf8" });
-  assert.equal(run.status, 0);
-  assert.equal(run.stdout, "");
+  assert.equal(hook({ tool_name: "mcp__collaborationspawn_agent", tool_input: {} }), "");
+  assert.equal(hook({ tool_input: {} }), "");
+});
+
+test("c6_1: the no-subagents hook fails closed on unparseable input", () => {
+  for (const input of ["not json", "", "{"]) {
+    const run = spawnSync(process.execPath, [NO_SUBAGENTS_FILE], { input, encoding: "utf8" });
+    assert.equal(run.status, 0);
+    const out = JSON.parse(run.stdout);
+    assert.equal(out.hookSpecificOutput.permissionDecision, "deny", JSON.stringify(input));
+    assert.equal(out.hookSpecificOutput.permissionDecisionReason, "use lounge_spawn");
+  }
 });
 
 test("C15_5: codexSubagentArgs adds a second PreToolUse hook after the guard hook, with no feature flag", () => {
