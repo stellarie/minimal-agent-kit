@@ -27,8 +27,24 @@ test("C15_5: the no-subagents hook denies collaborationspawn_agent with the reas
   });
 });
 
-test("C15_5: the no-subagents hook stays silent for other tools and bad input", () => {
-  assert.equal(hook({ tool_name: "collaborationwait_agent", tool_input: { timeout_ms: 1 } }), "");
+test("c6_1: the no-subagents hook denies every collaboration agent tool, send_input, and send_message", () => {
+  const names = [
+    "collaborationspawn_agent",
+    "collaborationwait_agent",
+    "collaborationinterrupt_agent",
+    "collaborationlist_agents",
+    "collaborationclose_agent",
+    "collaborationsend_input",
+    "collaborationsend_message",
+  ];
+  for (const tool_name of names) {
+    const out = JSON.parse(hook({ tool_name, tool_input: {} }));
+    assert.equal(out.hookSpecificOutput.permissionDecision, "deny", tool_name);
+  }
+});
+
+test("c6_1: the no-subagents hook stays silent for other tools and bad input", () => {
+  assert.equal(hook({ tool_name: "collaborationnote", tool_input: {} }), "");
   assert.equal(hook({ tool_name: "Bash", tool_input: { command: "echo collaborationspawn_agent" } }), "");
   const run = spawnSync(process.execPath, [NO_SUBAGENTS_FILE], { input: "not json", encoding: "utf8" });
   assert.equal(run.status, 0);
