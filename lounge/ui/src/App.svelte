@@ -46,6 +46,8 @@
   import PhaseHeader from "./components/PhaseHeader.svelte";
   import TokenForm from "./components/TokenForm.svelte";
   import ThemePicker from "./components/ThemePicker.svelte";
+  import UpdateBanner from "./components/UpdateBanner.svelte";
+  import { bannerFor, type UpdateState } from "./lib/update.ts";
   import FontPicker from "./components/FontPicker.svelte";
   import { ChevronsLeft, ChevronsRight } from "@lucide/svelte";
   import { takeFragmentToken } from "./lib/token.ts";
@@ -84,6 +86,8 @@
   let guardChanges = $state(0);
   let starting = $state(false);
   let problem = $state("");
+  let updateState = $state<UpdateState | null>(null);
+  const banner = $derived(bannerFor(updateState));
   let tokenProblem = $state("");
   let now = $state(Date.now());
   let view = $state<"lounge" | "rules" | "wiki" | "permissions" | "agents" | "skills" | "plugins" | "theme">("lounge");
@@ -337,6 +341,24 @@
     }
   }
 
+  async function loadUpdate() {
+    if (!client) return;
+    try {
+      updateState = await client.update();
+    } catch (err) {
+      fail(err);
+    }
+  }
+
+  async function updateAction(action: "download" | "apply") {
+    if (!client) return;
+    try {
+      updateState = action === "download" ? await client.downloadUpdate() : await client.applyUpdate();
+    } catch (err) {
+      fail(err);
+    }
+  }
+
   async function toggleAuto() {
     if (!client || !auto) return;
     try {
@@ -558,6 +580,7 @@
       typing: (t) => setTyping(t.roomId, t.caller, t.active),
       nickname: (n) => setNickname(n.caller, n.name),
       roster: rosterChanged,
+      update: () => void loadUpdate(),
       scheduled: upsertEvent,
       work: upsertWork,
       approval: setApprovals,
@@ -575,11 +598,13 @@
           void loadRoster();
           void loadEvents();
           void loadThreads();
+          void loadUpdate();
         }
       },
     });
     void loadChannels().then(() => catchUp().then(restoreScroll));
     void loadRoster();
+    void loadUpdate();
     void refreshPresence();
     void loadEvents();
     void loadThreads();
@@ -591,6 +616,7 @@
     unsubscribe = null;
     clearInterval(presenceTimer);
     client = null;
+    updateState = null;
     link = "offline";
     typing = [];
     work = [];
@@ -667,6 +693,7 @@
 <a class="skip" href="#composer">Skip to the message box</a>
 
 <div class="app">
+<div class="top">
 <header class="topbar">
   <span class="brand"><span class="mark" aria-hidden="true"></span>agent lounge</span>
   <div class="views-wrap">
@@ -710,6 +737,10 @@
     </button>
   </div>
 </header>
+{#if banner}
+  <UpdateBanner {banner} onAction={updateAction} />
+{/if}
+</div>
 
 <main class="single theme-page" hidden={view !== "theme"}>
   <h1 class="view-title">theme</h1>

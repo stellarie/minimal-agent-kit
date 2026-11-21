@@ -1,4 +1,5 @@
 import type { ToolMode } from "./toolModes.ts";
+import type { UpdateState } from "./update.ts";
 
 // A roster id.
 export type Agent = string;
@@ -349,6 +350,8 @@ export interface LoungeEvents {
   guard(): void;
   // The roster changed: refetch the list.
   roster(): void;
+  // The update state changed: refetch it.
+  update(): void;
   // Rooms were deleted: a channel and its threads.
   removed?(ids: string[]): void;
 }
@@ -422,6 +425,9 @@ export interface LoungeClient {
   who(): Promise<Presence[]>;
   scheduler(): Promise<SchedulerStatus>;
   setScheduler(enabled: boolean): Promise<SchedulerStatus>;
+  update(): Promise<UpdateState>;
+  downloadUpdate(): Promise<UpdateState>;
+  applyUpdate(): Promise<UpdateState>;
   loungeRules(): Promise<{ text: string }>;
   saveLoungeRules(text: string): Promise<{ text: string }>;
   wikiPages(): Promise<{ folder: string; pages: string[] }>;
@@ -623,6 +629,18 @@ export function createHttpClient(token: string): LoungeClient {
       return call<SchedulerStatus>("/api/scheduler", send("PUT", { enabled }));
     },
 
+    update() {
+      return call<UpdateState>("/api/update");
+    },
+
+    downloadUpdate() {
+      return call<UpdateState>("/api/update/download", { method: "POST" });
+    },
+
+    applyUpdate() {
+      return call<UpdateState>("/api/update/apply", { method: "POST" });
+    },
+
     loungeRules() {
       return call<{ text: string }>("/api/lounge/rules");
     },
@@ -784,6 +802,7 @@ export function createHttpClient(token: string): LoungeClient {
             if (data.type === "approval" && Array.isArray(data.pending)) on.approval(data.pending);
             if (data.type === "guard") on.guard();
             if (data.type === "roster") on.roster();
+            if (data.type === "update") on.update();
             if (data.type === "scheduled" && data.event) on.scheduled(data.event);
             if (data.type === "work" && data.agent && data.roomId) {
               on.work({ agent: data.agent, roomId: data.roomId, active: data.active === true, tool: data.tool });
