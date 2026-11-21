@@ -52,6 +52,8 @@ import { seedDrift } from "../roster/seed.ts";
 import { type AgentEntry, type RuntimeContext, type RuntimeKind } from "../roster/types.ts";
 import { Wiki, wikiDir, type WikiSetup } from "../wiki/wiki.ts";
 import { buildContext } from "../adapters/context.ts";
+import { UpdateService, type UpdateOptions } from "../update/service.ts";
+import { coreVersion } from "../version.ts";
 import type { ChatTurnInput } from "../adapters/types.ts";
 
 export interface CoreHandle {
@@ -222,8 +224,16 @@ export async function startCore(opts: {
   reveal?: (path: string) => Promise<void>;
   // Replaces the project and the WIKI_ROOT and WIKI_NAME variables; tests never read the real wiki.
   wiki?: WikiSetup;
+  // Unset in tests: no release check runs.
+  update?: UpdateOptions;
 }): Promise<CoreHandle> {
   const config = loadConfig(opts.home);
+  const updates = new UpdateService({
+    home: opts.home,
+    current: coreVersion(),
+    enabled: config.update.check,
+    update: opts.update,
+  });
   if (config.host !== DEFAULT_HOST) {
     throw new Error(`refusing to bind to host ${config.host}: the core binds to ${DEFAULT_HOST} only`);
   }
@@ -479,6 +489,27 @@ export async function startCore(opts: {
         return;
       }
       throw new HttpError(405, "method_not_allowed", "use GET or PUT");
+    }
+    if (url.pathname === "/api/update") {
+      requireOwner(req);
+      if (method !== "GET") throw new HttpError(405, "method_not_allowed", "use GET");
+      sendJson(res, 200, updates.status());
+      return;
+    }
+    if (url.pathname === "/api/update/download") {
+      requireOwner(req);
+      if (method !== "POST") throw new HttpError(405, "method_not_allowed", "use POST");
+      if (!updates.download()) throw new HttpError(409, "conflict", "no update is available to download");
+      sendJson(res, 202, updates.status());
+      return;
+    }
+    if (url.pathname === "/api/update/apply") {
+      requireOwner(req);
+      if (method !== "POST") throw new HttpError(405, "method_not_allowed", "use POST");
+      if (!(await updates.apply())) throw new HttpError(409, "conflict", "no staged update to apply");
+      res.once("finish", () => updates.exit());
+      sendJson(res, 202, updates.status());
+      return;
     }
     if (url.pathname === "/api/lounge/rules") {
       requireOwner(req);
@@ -1039,6 +1070,7 @@ export async function startCore(opts: {
     room.onTyping((t) => broadcast({ type: "typing", ...t })),
     room.onNickname((n) => broadcast({ type: "nickname", ...n })),
     events.onChange((event) => broadcast({ type: "scheduled", event })),
+    updates.onChange((update) => broadcast({ type: "update", update })),
     threads.onWork((w) => broadcast({ type: "work", ...w })),
     room.onLayout((l) => broadcast({ type: "layout", ...l })),
     roster.onChange((id, kind) => broadcast({ type: "roster", id, kind })),
@@ -1067,6 +1099,7 @@ export async function startCore(opts: {
   });
 
   const shutdown = async () => {
+    updates.stop();
     events.stop();
     threads.stop();
     reach.stop();
@@ -1102,6 +1135,7 @@ export async function startCore(opts: {
   if (opts.probeMs !== undefined) reach.start();
   threads.start();
   if (opts.schedule) scheduler.start();
+  updates.start();
   // Tests start events by hand.
   if (opts.schedule || opts.events) events.start();
   let closing: Promise<void> | undefined;
