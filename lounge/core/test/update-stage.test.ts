@@ -179,3 +179,17 @@ test("c4_2: staging writes only under <home>/updates/<version>", async (t) => {
   assert.deepEqual(readdirSync(s.home), ["updates"]);
   assert.deepEqual(readdirSync(join(s.home, "updates")), [VERSION]);
 });
+
+test("c4_3: staging removes every other entry under <home>/updates", async (t) => {
+  const s = setup(t);
+  const updates = join(s.home, "updates");
+  mkdirSync(join(updates, "0.9.0", "root"), { recursive: true });
+  writeFileSync(join(updates, "0.9.0", "root", "old.txt"), "x");
+  mkdirSync(join(updates, "0.9.5"), { recursive: true });
+  writeFileSync(join(updates, "stray.txt"), "x");
+  writeFileSync(join(s.home, "keep.txt"), "x");
+  const result = await s.run(buildZip(s.scratch));
+  assert.deepEqual(result, { state: "ready", version: VERSION });
+  assert.deepEqual(readdirSync(updates), [VERSION]);
+  assert.ok(existsSync(join(s.home, "keep.txt")));
+});

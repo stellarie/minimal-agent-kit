@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { access, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import type { Fetch, ReleaseAsset } from "./check.ts";
 import { verifyMinisign } from "./minisign.ts";
@@ -9,6 +9,22 @@ const TAR = "C:/Windows/System32/tar.exe";
 const run = promisify(execFile);
 
 export type StageResult = { state: "ready"; version: string } | { state: "error"; reason: string };
+
+// Removes every entry under <home>/updates except the version being staged.
+async function pruneUpdates(home: string, keep: string): Promise<void> {
+  const updates = resolve(home, "updates");
+  let names: string[];
+  try {
+    names = await readdir(updates);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    const target = resolve(updates, name);
+    if (name === keep || dirname(target) !== updates) continue;
+    await rm(target, { recursive: true, force: true });
+  }
+}
 
 export async function stageRelease(opts: {
   release: { version: string; assets: ReleaseAsset[] };
@@ -35,6 +51,7 @@ export async function stageRelease(opts: {
     return Buffer.from(await res.arrayBuffer());
   };
 
+  await pruneUpdates(opts.home, version);
   await rm(dir, { recursive: true, force: true });
   await mkdir(root, { recursive: true });
   let zipBytes: Buffer;
