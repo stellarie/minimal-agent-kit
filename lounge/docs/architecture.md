@@ -26,7 +26,7 @@ flowchart LR
 | App | `lounge/app` | Starts the core from `core/` beside the exe. Shows the UI. |
 | Core | `lounge/core` | Keeps threads, roster, schedules, approvals, and the SQLite store. Serves `/api/...`, `/guard/check`, and the MCP tools. |
 | UI | `lounge/ui` | Channels, threads, approval cards, and side tabs. |
-| Plugins | `lounge/plugins` | One per runtime: `claude-code` and `codex`. A plugin runs one turn and reads its events. |
+| Plugins | `lounge/plugins` | One per runtime: `claude-code` and `codex`. A plugin runs one turn and reads its events. `kit-workflow` adds the kit workflow skill. |
 | Guard | `core/guard` | The kit guard. One engine for the kit and the lounge. |
 | Skills | `lounge/skills` | Seed skills. |
 
@@ -59,7 +59,13 @@ On the first start, the core copies `lounge/skills/{lounge-workflow,wiki,ste}` t
 
 ## Plugin skills
 
-An enabled plugin can supply skills. `plugin.json` has `skills` (skill name to folder) and `vars` (name to folder), with paths relative to the plugin folder. The context lists a plugin skill with the others. Its body has each `$NAME` of `vars` replaced by an absolute path, and ends with the folder of the skill files. A plugin skill is read-only. A skill in `<home>\skills` with the same name hides it. A plugin in `<home>\plugins` may not point outside its own folder. A bundled plugin may.
+An enabled plugin can supply skills. `plugin.json` has `skills` (skill name to folder) and `vars` (name to folder). Paths are relative to the plugin folder.
+
+- The context lists a plugin skill with the others.
+- Its body has each `$NAME` of `vars` replaced by an absolute path. It ends with the folder of the skill files.
+- A plugin skill is read-only.
+- A skill in `<home>\skills` with the same name hides it.
+- A plugin in `<home>\plugins` may not point outside its own folder. A bundled plugin may.
 
 ## Phase gates
 

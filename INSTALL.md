@@ -121,6 +121,8 @@ To install the lounge:
 
 The lounge runs each runtime in isolation. It loads none of your own skills, plugins, `CLAUDE.md`, or `AGENTS.md`. It copies the skills `lounge-workflow`, `wiki`, and `ste` to `<home>\skills` on the first start. It never overwrites a skill that you edited.
 
+The bundled plugin `kit-workflow` adds the full kit workflow skill and its verify scripts. It stays off until you turn it on in the plugin list, and it needs Python 3 on the `PATH`.
+
 To build the zips from source, you need the Rust toolchain. Build the three parts first:
 
 ```bash
