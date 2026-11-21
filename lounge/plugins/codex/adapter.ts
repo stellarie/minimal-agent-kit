@@ -4,9 +4,11 @@ import { resolve, win32 } from "node:path";
 import type { Adapter, ChatTurnInput, ChatTurnResult } from "../../core/src/adapters/types.ts";
 import { chatFolder } from "../../core/src/config.ts";
 import type { AgentEntry, RuntimeContext, RuntimeKind } from "../../core/src/roster/types.ts";
+import { readCodexCatalog } from "./catalog.ts";
 import { readLine, stderrActivity, type CodexRun } from "./events.ts";
 import { codexIsolationArgs, codexSignInReason } from "./isolate.ts";
 import { locateCodex } from "./locate.ts";
+import { codexStdin } from "./rules.ts";
 import { codexSubagentArgs, type CodexHookEntry } from "./subagents.ts";
 
 const SOFT_MS = 60_000;
@@ -28,6 +30,8 @@ export interface CodexAdapterOptions {
   prompt: Pick<RuntimeContext["prompt"], "chatPrompt" | "turnText" | "isPass">;
   activity: Pick<RuntimeContext["activity"], "lineSplitter">;
   model?: string;
+  // Sent on every turn, a resumed one too.
+  effort?: string;
   // Where to look for codex. Unset: this process.
   env?: NodeJS.ProcessEnv;
 }
@@ -60,7 +64,7 @@ function roomKey(input: ChatTurnInput): string {
 export class CodexAdapter implements Adapter {
   readonly name = "codex" as const;
   readonly #opts: CodexAdapterOptions;
-  readonly #threads = new Map<string, string>();
+  readonly #threads = new Map<string, { threadId: string; rulesHash: string }>();
 
   constructor(opts: CodexAdapterOptions) {
     this.#opts = opts;
@@ -82,7 +86,8 @@ export class CodexAdapter implements Adapter {
     const reason = await codexSignInReason(home, { command: exe, commandArgs });
     if (reason) throw new Error(reason);
     const key = roomKey(input);
-    const threadId = this.#threads.get(key);
+    const thread = this.#threads.get(key);
+    const threadId = thread?.threadId;
     const workDir = input.work?.cwd ?? chatFolder(home, input.agent);
     mkdirSync(workDir, { recursive: true });
     const isolation = codexIsolationArgs(home);
@@ -90,11 +95,11 @@ export class CodexAdapter implements Adapter {
       ? ["exec", "resume", threadId, "--json", "--skip-git-repo-check"]
       : ["exec", "--json", "--skip-git-repo-check", "-C", windowsPath(workDir)];
     if (!threadId && this.#opts.model) tail.push("-m", this.#opts.model);
-    // The context goes in once: a resumed thread already holds it.
-    const stdin = threadId ? this.#opts.prompt.turnText(input) : this.#opts.prompt.chatPrompt(input);
+    const { text: stdin, hash } = codexStdin(thread, input, this.#opts.prompt);
     const args = [
       ...commandArgs,
       ...isolation.args,
+      ...(this.#opts.effort ? ["-c", `model_reasoning_effort=${this.#opts.effort}`] : []),
       ...codexSubagentArgs([guardHook(this.#opts.hookFile)]),
       ...tail,
       "--dangerously-bypass-hook-trust",
@@ -115,7 +120,7 @@ export class CodexAdapter implements Adapter {
     const run = await this.#run(child, stdin, input, signal);
     if (!run.threadId) throw new Error("codex gave no thread id");
     if (run.reply === undefined) throw new Error("codex gave no reply");
-    this.#threads.set(key, run.threadId);
+    this.#threads.set(key, { threadId: run.threadId, rulesHash: hash });
     return this.#opts.prompt.isPass(run.reply) ? { kind: "pass" } : { kind: "post", text: run.reply };
   }
 
@@ -186,12 +191,23 @@ export class CodexAdapter implements Adapter {
   }
 }
 
-export function codexKind(): RuntimeKind {
+const EFFORT_ORDER = ["low", "medium", "high", "xhigh", "max", "ultra"];
+
+function effortRank(effort: string): number {
+  const at = EFFORT_ORDER.indexOf(effort);
+  return at < 0 ? EFFORT_ORDER.length : at;
+}
+
+export function codexKind(catalog: Awaited<ReturnType<typeof readCodexCatalog>> = { models: [] }): RuntimeKind {
   return {
     id: "codex",
     label: "Codex",
-    efforts: () => [],
-    models: () => [],
+    efforts: (entry: AgentEntry) => {
+      const model = catalog.models.find((m) => m.id === entry.model);
+      if (model) return [...model.efforts];
+      return [...new Set(catalog.models.flatMap((m) => m.efforts))].sort((a, b) => effortRank(a) - effortRank(b));
+    },
+    models: () => catalog.models.map((m) => m.id),
     create: (entry: AgentEntry, ctx: RuntimeContext) =>
       new CodexAdapter({
         command: entry.options.command ?? "codex",
@@ -204,10 +220,11 @@ export function codexKind(): RuntimeKind {
         prompt: ctx.prompt,
         activity: ctx.activity,
         ...(entry.model ? { model: entry.model } : {}),
+        ...(entry.effort ? { effort: entry.effort } : {}),
       }),
   };
 }
 
-export default function setup(api: { runtime(def: RuntimeKind): void }): void {
-  api.runtime(codexKind());
+export default async function setup(api: { home: string; runtime(def: RuntimeKind): void }): Promise<void> {
+  api.runtime(codexKind(await readCodexCatalog({ home: api.home })));
 }

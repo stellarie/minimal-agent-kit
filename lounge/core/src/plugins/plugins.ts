@@ -271,6 +271,7 @@ export class Plugins {
     const api = {
       id: p.id,
       dir: p.dir,
+      home: this.#home,
       log: (text: unknown) => this.#log(`plugin ${p.id}: ${String(text)}`),
       guard: (fn: unknown) => {
         if (typeof fn !== "function") throw new Error("guard needs a function");

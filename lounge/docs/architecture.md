@@ -57,6 +57,16 @@ On the first start, the core copies `lounge/skills/{lounge-workflow,wiki,ste}` t
 | `wiki` | Reads and writes the project wiki. |
 | `ste` | Writes Simplified Technical English. |
 
+## Models and efforts
+
+Each runtime plugin reads its model list when it loads, and again on **Refresh**.
+
+- Claude Code: the newest `*-cc.json` in `~/.claude/cache/model-catalog`, without the masked ids. If the folder is empty, the efforts come from `claude --help`.
+- Codex: `codex debug models` with the lounge `CODEX_HOME`. If it fails, `models_cache.json` of that folder.
+- The efforts of an agent are the efforts of its model. An empty or typed model gets all efforts of the catalog.
+- Codex gets `-c model_reasoning_effort=<effort>` on every turn, a resumed turn too. A resumed thread gets the full context again when the lounge rules changed.
+- A plugin setup function gets `api.home`, the lounge home folder.
+
 ## Plugin skills
 
 An enabled plugin can supply skills. `plugin.json` has `skills` (skill name to folder) and `vars` (name to folder). Paths are relative to the plugin folder.

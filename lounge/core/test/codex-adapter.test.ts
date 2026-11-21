@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { copyFileSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CodexAdapter } from "../../plugins/codex/adapter.ts";
+import setupCodex, { CodexAdapter, codexKind } from "../../plugins/codex/adapter.ts";
+import type { AgentEntry, RuntimeKind } from "../src/roster/types.ts";
 import { CODEX_NOT_FOUND, locateCodex } from "../../plugins/codex/locate.ts";
 import { CODEX_NOT_SIGNED_IN } from "../../plugins/codex/isolate.ts";
 import { NO_SUBAGENTS_MATCHER } from "../../plugins/codex/subagents.ts";
@@ -45,7 +46,15 @@ function setEnv(t: TestContext, key: string, value: string): void {
 function rig(
   t: TestContext,
   mode: string,
-  over: { command?: string; commandArgs?: string[]; env?: NodeJS.ProcessEnv; signedIn?: boolean; hardMs?: number } = {},
+  over: {
+    command?: string;
+    commandArgs?: string[];
+    env?: NodeJS.ProcessEnv;
+    signedIn?: boolean;
+    hardMs?: number;
+    model?: string;
+    effort?: string;
+  } = {},
 ): Rig {
   const h = tempHome();
   t.after(() => h.cleanup());
@@ -67,6 +76,8 @@ function rig(
     prompt: HOST_PARTS.prompt,
     activity: HOST_PARTS.activity,
     ...(over.env ? { env: over.env } : {}),
+    ...(over.model ? { model: over.model } : {}),
+    ...(over.effort ? { effort: over.effort } : {}),
   });
   const runs = () => {
     let text = "";
@@ -236,6 +247,94 @@ test("C7_3: a blocked command shows the stderr reason and the agent text", async
   const result = await r.adapter.chatTurn(input({}, lines), new AbortController().signal);
   assert.deepEqual(result, { kind: "post", text: "The hook blocked the command." });
   assert.ok(lines.includes("Command blocked by PreToolUse hook: test-deny blocked. Command: echo test-deny"), lines.join("\n"));
+});
+
+const effortValues = (argv: string[]) => argv.filter((a) => a.startsWith("model_reasoning_effort="));
+const CATALOG = {
+  models: [
+    { id: "big", label: "Big", efforts: ["low", "high", "ultra"], default: "low" },
+    { id: "small", label: "Small", efforts: ["low", "medium", "high"], default: "low" },
+  ],
+};
+
+test("c5_1: a new thread gets -m and -c model_reasoning_effort", async (t) => {
+  const r = rig(t, "ok", { model: "big", effort: "ultra" });
+  await r.adapter.chatTurn(input(), new AbortController().signal);
+  const { argv } = r.runs()[0]!;
+  assert.deepEqual(argv.slice(argv.indexOf("-m"), argv.indexOf("-m") + 2), ["-m", "big"]);
+  assert.deepEqual(effortValues(argv), ["model_reasoning_effort=ultra"]);
+  assert.equal(argv[argv.indexOf("model_reasoning_effort=ultra") - 1], "-c");
+  assert.ok(argv.indexOf("model_reasoning_effort=ultra") < argv.indexOf("exec"));
+});
+
+test("c5_1: a resumed thread gets -c model_reasoning_effort", async (t) => {
+  const r = rig(t, "ok", { model: "big", effort: "high" });
+  const signal = new AbortController().signal;
+  await r.adapter.chatTurn(input(), signal);
+  await r.adapter.chatTurn(input(), signal);
+  const resumed = r.runs()[1]!.argv;
+  assert.ok(resumed.includes("resume"));
+  assert.ok(!resumed.includes("-m"));
+  assert.deepEqual(effortValues(resumed), ["model_reasoning_effort=high"]);
+  assert.equal(resumed[resumed.indexOf("model_reasoning_effort=high") - 1], "-c");
+});
+
+test("c5_1: an empty effort adds no -c model_reasoning_effort", async (t) => {
+  const r = rig(t, "ok", { model: "big" });
+  const signal = new AbortController().signal;
+  await r.adapter.chatTurn(input(), signal);
+  await r.adapter.chatTurn(input(), signal);
+  for (const run of r.runs()) assert.deepEqual(effortValues(run.argv), []);
+});
+
+test("c5_2: efforts(entry) gives the catalog efforts of entry.model", () => {
+  const kind = codexKind(CATALOG);
+  assert.deepEqual(kind.efforts({ model: "big" } as AgentEntry), ["low", "high", "ultra"]);
+  assert.deepEqual(kind.efforts({ model: "small" } as AgentEntry), ["low", "medium", "high"]);
+  assert.deepEqual(kind.models({} as AgentEntry), ["big", "small"]);
+});
+
+test("c5_2: an empty model gives the union of catalog efforts", () => {
+  const kind = codexKind(CATALOG);
+  assert.deepEqual(kind.efforts({ model: "" } as AgentEntry), ["low", "medium", "high", "ultra"]);
+  assert.deepEqual(kind.efforts({ model: "typed-by-hand" } as AgentEntry), ["low", "medium", "high", "ultra"]);
+});
+
+test("c5_2: an empty catalog gives no efforts", () => {
+  const kind = codexKind({ models: [] });
+  assert.deepEqual([kind.efforts({ model: "big" } as AgentEntry), kind.models({} as AgentEntry)], [[], []]);
+  assert.deepEqual(codexKind().efforts({ model: "" } as AgentEntry), []);
+});
+
+test("c5_3: changed lounge rules send the full context again on a resumed thread", async (t) => {
+  const r = rig(t, "ok");
+  const signal = new AbortController().signal;
+  await r.adapter.chatTurn(input({ loungeRules: "rule one" }), signal);
+  await r.adapter.chatTurn(input({ loungeRules: "rule one" }), signal);
+  await r.adapter.chatTurn(input({ loungeRules: "rule two" }), signal);
+  await r.adapter.chatTurn(input({ loungeRules: "rule two" }), signal);
+  const [first, same, changed, again] = r.runs();
+  assert.equal(count(first!.stdin, MARKER), 1);
+  assert.equal(count(same!.stdin, MARKER), 0);
+  assert.equal(count(changed!.stdin, MARKER), 1);
+  assert.ok(changed!.stdin.includes("rule two"));
+  assert.ok(changed!.argv.includes("resume"));
+  assert.equal(count(again!.stdin, MARKER), 0);
+});
+
+test("codex plugin: setup reads the catalog of the lounge home and the kind lists its models", async (t) => {
+  const h = tempHome();
+  t.after(() => h.cleanup());
+  mkdirSync(join(h.dir, "codex-home"), { recursive: true });
+  writeFileSync(
+    join(h.dir, "codex-home", "models_cache.json"),
+    JSON.stringify({ models: [{ slug: "cached", display_name: "Cached", visibility: "list", supported_reasoning_levels: [{ effort: "low" }] }] }),
+  );
+  setEnv(t, "PATH", "");
+  setEnv(t, "LOCALAPPDATA", join(h.dir, "none"));
+  let kind: RuntimeKind | undefined;
+  await setupCodex({ home: h.dir, runtime: (def) => void (kind = def) });
+  assert.deepEqual(kind!.models({} as AgentEntry), ["cached"]);
 });
 
 test("codex plugin: the bundled plugin loads with no error and holds the codex runtime", async (t) => {
