@@ -54,7 +54,7 @@ async function rig(t: TestContext, enabled: string[] = ["kit"]): Promise<Rig> {
   return { home: h.dir, bundled, shared, plugins, skills };
 }
 
-test("c7_1: an enabled plugin's skills field adds read-only skills", async (t) => {
+test("c7_1: an enabled plugin with a skills field adds read-only skills", async (t) => {
   const r = await rig(t);
   const want = resolve(r.shared, "workflow");
   assert.deepEqual(r.plugins.skillSources(), [
