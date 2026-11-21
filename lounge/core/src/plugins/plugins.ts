@@ -6,6 +6,7 @@ import { readSetting, writeSetting } from "../db/settings.ts";
 import type { PluginGuard } from "../guard/guard.ts";
 import { LoungeError } from "../lounge/room.ts";
 import { ID_PATTERN, type RuntimeKind } from "../roster/types.ts";
+import { SKILL_NAME, type SkillSource } from "../skills/skills.ts";
 
 export type PluginEvent = "message" | "turnEnd" | "eventFire";
 const EVENTS: readonly PluginEvent[] = ["message", "turnEnd", "eventFire"];
@@ -39,6 +40,8 @@ export interface PluginInfo {
   // True for a plugin that ships with the lounge.
   bundled: boolean;
   panel?: string;
+  // Names of the skills it declares.
+  skills: string[];
 }
 
 interface Manifest {
@@ -49,6 +52,9 @@ interface Manifest {
   panel?: string;
   // Declared so a disabled plugin can still be named.
   runtimes: string[];
+  // Skill name to its folder, and variable name to a folder, both relative to the plugin folder.
+  skills: Record<string, string>;
+  vars: Record<string, string>;
 }
 
 interface Loaded {
@@ -67,6 +73,7 @@ interface Loaded {
 
 const ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const TOOL = /^[a-z0-9_]{1,32}$/;
+const VAR_NAME = /^[A-Z][A-Z0-9_]{0,31}$/;
 const SETTING = "plugins.enabled";
 const TYPES = new Set(["string", "number", "boolean"]);
 
@@ -75,7 +82,22 @@ function inside(child: string, parent: string): boolean {
   return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
 }
 
-function readManifest(dir: string): Manifest {
+// A bundled plugin ships with the lounge and may point at the kit folders beside it.
+// A plugin in the home folder is the owner's file and may not read outside its folder.
+function folderMap(raw: unknown, key: string, label: string, valid: RegExp, dir: string, bundled: boolean): Record<string, string> {
+  if (raw === undefined) return {};
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error(`plugin.json ${key} must map names to folders`);
+  const out: Record<string, string> = {};
+  for (const [name, rel] of Object.entries(raw)) {
+    if (!valid.test(name)) throw new Error(`plugin.json ${key} has a bad ${label} name: ${name.slice(0, 40)}`);
+    if (typeof rel !== "string" || rel === "") throw new Error(`plugin.json ${key} ${name} must be a folder`);
+    if (!bundled && !inside(resolve(dir, rel), dir)) throw new Error(`plugin.json ${key} ${name} must stay inside the plugin folder`);
+    out[name] = rel;
+  }
+  return out;
+}
+
+function readManifest(dir: string, bundled: boolean): Manifest {
   const raw = JSON.parse(readFileSync(join(dir, "plugin.json"), "utf8")) as Record<string, unknown>;
   if (typeof raw.name !== "string" || raw.name.trim() === "") throw new Error("plugin.json needs a name");
   const opt = (k: string) => {
@@ -94,6 +116,8 @@ function readManifest(dir: string): Manifest {
     main: opt("main"),
     panel: opt("panel"),
     runtimes: runtimes as string[],
+    skills: folderMap(raw.skills, "skills", "skill", SKILL_NAME, dir, bundled),
+    vars: folderMap(raw.vars, "vars", "variable", VAR_NAME, dir, bundled),
   };
 }
 
@@ -208,7 +232,7 @@ export class Plugins {
       };
       next.push(p);
       try {
-        p.manifest = readManifest(dir);
+        p.manifest = readManifest(dir, bundled);
       } catch (err) {
         p.errors.push((err as Error).message);
         continue;
@@ -351,8 +375,19 @@ export class Plugins {
         guards: p.guards.length,
         runtimes: p.enabled ? p.runtimes.map((r) => r.id) : (m?.runtimes ?? []),
         bundled: p.bundled,
+        skills: Object.keys(m?.skills ?? {}),
         ...(panel ? { panel } : {}),
       };
+    });
+  }
+
+  // The skills of enabled plugins that loaded without an error.
+  skillSources(): SkillSource[] {
+    return this.#loaded.flatMap((p) => {
+      const m = p.manifest;
+      if (!m || !p.enabled || p.errors.length > 0) return [];
+      const vars = Object.fromEntries(Object.entries(m.vars).map(([name, rel]) => [name, resolve(p.dir, rel)]));
+      return Object.entries(m.skills).map(([name, rel]) => ({ name, dir: resolve(p.dir, rel), vars }));
     });
   }
 

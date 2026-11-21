@@ -288,7 +288,7 @@ export async function startCore(opts: {
     classify: (_id, request, signal) => classify(request, signal, { models: () => readModels(db), cache: safeCalls }),
     classifyMs: () => classifyBudget(readModels(db).length),
   });
-  const skills = new Skills({ home: opts.home, now: opts.now });
+  const skills = new Skills({ home: opts.home, now: opts.now, extra: () => plugins.skillSources() });
   if (opts.bundledSkills !== undefined) seedSkills(skills, opts.bundledSkills);
   // The command of the first agent on the codex runtime.
   const codexLogin = new CodexLogin({

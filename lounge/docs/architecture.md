@@ -57,6 +57,10 @@ On the first start, the core copies `lounge/skills/{lounge-workflow,wiki,ste}` t
 | `wiki` | Reads and writes the project wiki. |
 | `ste` | Writes Simplified Technical English. |
 
+## Plugin skills
+
+An enabled plugin can supply skills. `plugin.json` has `skills` (skill name to folder) and `vars` (name to folder), with paths relative to the plugin folder. The context lists a plugin skill with the others. Its body has each `$NAME` of `vars` replaced by an absolute path, and ends with the folder of the skill files. A plugin skill is read-only. A skill in `<home>\skills` with the same name hides it. A plugin in `<home>\plugins` may not point outside its own folder. A bundled plugin may.
+
 ## Phase gates
 
 `lounge_gate {phase, summary, file}` opens a card with Approve and Change in the approval stack.

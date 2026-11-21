@@ -126,17 +126,32 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// The lounge skills: one folder per skill under {home}/skills, and nothing else.
+// A skill that a plugin supplies. It is read-only, and a lounge skill of the same name wins.
+export interface SkillSource {
+  name: string;
+  // Absolute folder of the SKILL.md and the files beside it.
+  dir: string;
+  // $NAME in the body becomes the absolute path.
+  vars: Record<string, string>;
+}
+
+function slashes(path: string): string {
+  return path.replace(/\\/g, "/");
+}
+
+// The lounge skills: one folder per skill under {home}/skills, and the skills of plugins.
 // A skill folder of a harness (~/.claude/skills, ~/.codex/skills) is never read.
 export class Skills {
   readonly #root: string;
   readonly #now: () => Date;
+  readonly #extra: () => SkillSource[];
   #signature = "";
   #scan: SkillScan = { skills: [], skipped: [] };
 
-  constructor(opts: { home: string; now?: () => Date }) {
+  constructor(opts: { home: string; now?: () => Date; extra?: () => SkillSource[] }) {
     this.#root = join(opts.home, "skills");
     this.#now = opts.now ?? (() => new Date());
+    this.#extra = opts.extra ?? (() => []);
   }
 
   get root(): string {
@@ -144,26 +159,48 @@ export class Skills {
   }
 
   #folders(): { name: string; file: string; stamp: string }[] {
-    let entries;
-    try {
-      entries = readdirSync(this.#root, { withFileTypes: true });
-    } catch {
-      return [];
-    }
     const out: { name: string; file: string; stamp: string }[] = [];
-    for (const e of entries) {
-      if (!e.isDirectory() || e.name.startsWith(".")) continue;
-      const folder = join(this.#root, e.name);
-      const file = join(folder, SKILL_FILE);
+    try {
+      for (const e of readdirSync(this.#root, { withFileTypes: true })) {
+        if (!e.isDirectory() || e.name.startsWith(".")) continue;
+        const folder = join(this.#root, e.name);
+        const file = join(folder, SKILL_FILE);
+        try {
+          const st = lstatSync(file);
+          if (!st.isFile()) continue;
+          out.push({ name: e.name, file, stamp: `${e.name}|${statSync(folder).mtimeMs}|${st.mtimeMs}|${st.size}` });
+        } catch {
+          // A folder with no SKILL.md is no skill.
+        }
+      }
+    } catch {
+      // No skills folder yet.
+    }
+    out.sort((a, b) => (a.name < b.name ? -1 : 1));
+    const taken = new Set(out.map((f) => f.name));
+    for (const src of this.#extra()) {
+      if (taken.has(src.name)) continue;
+      const file = join(src.dir, SKILL_FILE);
       try {
         const st = lstatSync(file);
         if (!st.isFile()) continue;
-        out.push({ name: e.name, file, stamp: `${e.name}|${statSync(folder).mtimeMs}|${st.mtimeMs}|${st.size}` });
+        taken.add(src.name);
+        out.push({ name: src.name, file, stamp: `${src.name}|${file}|${st.mtimeMs}|${st.size}` });
       } catch {
-        // A folder with no SKILL.md is no skill.
+        // A plugin folder with no SKILL.md is no skill.
       }
     }
-    return out.sort((a, b) => (a.name < b.name ? -1 : 1));
+    return out;
+  }
+
+  // The plugin that supplies a skill, unless a lounge skill of that name hides it.
+  #sourceOf(name: string): SkillSource | undefined {
+    try {
+      if (lstatSync(join(this.#root, name, SKILL_FILE)).isFile()) return undefined;
+    } catch {
+      // No lounge skill of that name.
+    }
+    return this.#extra().find((s) => s.name === name);
   }
 
   // Scans again only when a folder or a SKILL.md changed.
@@ -245,9 +282,21 @@ export class Skills {
   // Only a valid skill loads. The editor still opens a skipped folder, so the owner can fix it.
   body(name: string): string {
     if (!this.present().has(name)) throw new LoungeError("unknown_skill", `unknown skill: ${String(name).slice(0, 80)}`);
+    const source = this.#sourceOf(name);
+    if (source) return this.#pluginBody(source);
     const { text } = this.get(name);
     const parsed = parseSkill(text);
     return parsed.ok ? parsed.body : text;
+  }
+
+  // The body with each $NAME of the plugin replaced, and the folder of the skill files at the end.
+  #pluginBody(source: SkillSource): string {
+    const parsed = parseSkill(readFileSync(join(source.dir, SKILL_FILE), "utf8"));
+    let text = parsed.ok ? parsed.body : "";
+    for (const [key, path] of Object.entries(source.vars)) {
+      text = text.replace(new RegExp(`\\$${key}(?![A-Za-z0-9_])`, "g"), () => slashes(path));
+    }
+    return `${text.trimEnd()}\n\nSkill files: ${slashes(source.dir)}\n`;
   }
 
   #writeSkillFile(file: string, text: string): void {
