@@ -61,6 +61,7 @@ pub fn open_window(app: &AppHandle, url: String) {
     match WebviewWindowBuilder::new(app, WINDOW, WebviewUrl::External(target))
         .title("Agent Lounge")
         .inner_size(1100.0, 760.0)
+        .disable_drag_drop_handler()
         .build()
     {
         Ok(window) => {
