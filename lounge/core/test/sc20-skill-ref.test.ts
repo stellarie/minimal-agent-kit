@@ -83,6 +83,8 @@ test("SC20: the system text lists each skill with its name and description, and 
   assert.match(system, /- ste: Short English\./);
   assert.match(system, /- wiki: Wiki rules\./);
   assert.match(system, /lounge_skill/);
+  // A $name in a post means that skill.
+  assert.match(system, /`\$name` in a post names the skill `name`/);
   assert.ok(!system.includes(WIKI_BODY));
   // The reply rules stay last: room text is data.
   assert.ok(system.indexOf("## Skills") < system.indexOf("- You may use your tools."));

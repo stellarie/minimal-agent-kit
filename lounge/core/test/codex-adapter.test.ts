@@ -8,6 +8,7 @@ import type { AgentEntry, RuntimeKind } from "../src/roster/types.ts";
 import { CODEX_NOT_FOUND, locateCodex } from "../../plugins/codex/locate.ts";
 import { CODEX_NOT_SIGNED_IN } from "../../plugins/codex/isolate.ts";
 import { NO_SUBAGENTS_MATCHER } from "../../plugins/codex/subagents.ts";
+import { IMAGE_NOTE } from "../../plugins/codex/rules.ts";
 import { startCore } from "../src/api/http.ts";
 import { ensureTokens } from "../src/auth/tokens.ts";
 import type { ChatTurnInput } from "../src/adapters/types.ts";
@@ -55,6 +56,7 @@ function rig(
     model?: string;
     effort?: string;
     sandbox?: string;
+    images?: boolean;
   } = {},
 ): Rig {
   const h = tempHome();
@@ -80,6 +82,7 @@ function rig(
     ...(over.model ? { model: over.model } : {}),
     ...(over.effort ? { effort: over.effort } : {}),
     ...(over.sandbox ? { sandbox: over.sandbox } : {}),
+    ...(over.images !== undefined ? { images: over.images } : {}),
   });
   const runs = () => {
     let text = "";
@@ -459,4 +462,104 @@ test("c8_2: every run, a resumed one too, attaches the lounge MCP server with th
     assert.ok(!run.argv.join(" ").includes("tok-123"), "the token never goes in the command line");
     assert.equal(run.guard.token, "tok-123", "the variable holds the token of the turn");
   }
+});
+
+const imageValues = (argv: string[]) => configValues(argv, "features.image_generation");
+
+test("c9_1: every run, a resumed one too, turns the image tool on before exec", async (t) => {
+  const r = rig(t, "ok");
+  const signal = new AbortController().signal;
+  await r.adapter.chatTurn(input(), signal);
+  await r.adapter.chatTurn(input(), signal);
+  const [first, resumed] = r.runs();
+  assert.ok(resumed!.argv.includes("resume"));
+  for (const run of [first!, resumed!]) {
+    assert.deepEqual(imageValues(run.argv), ["features.image_generation=true"]);
+    assert.ok(run.argv.indexOf("features.image_generation=true") < run.argv.indexOf("exec"));
+  }
+});
+
+test("c9_1: options.images false turns the image tool off and leaves the image line out of the prompt", async (t) => {
+  const r = rig(t, "ok", { images: false });
+  const signal = new AbortController().signal;
+  await r.adapter.chatTurn(input(), signal);
+  await r.adapter.chatTurn(input(), signal);
+  for (const run of r.runs()) assert.deepEqual(imageValues(run.argv), ["features.image_generation=false"]);
+  assert.ok(!r.runs()[0]!.stdin.includes(IMAGE_NOTE));
+});
+
+test("c9_1: the first prompt tells the agent that images post to the room by themselves", async (t) => {
+  const r = rig(t, "ok");
+  await r.adapter.chatTurn(input(), new AbortController().signal);
+  const stdin = r.runs()[0]!.stdin;
+  assert.ok(stdin.includes(IMAGE_NOTE));
+  assert.ok(stdin.indexOf(IMAGE_NOTE) < stdin.indexOf("- Reply with the message text only."), "the reply rules stay last");
+  assert.match(IMAGE_NOTE, /image/);
+  assert.match(IMAGE_NOTE, /lounge_attach/);
+});
+
+test("c9_1: the codex kind accepts a boolean options.images and rejects anything else", () => {
+  const kind = codexKind();
+  assert.equal(kind.validate?.({ images: true }), undefined);
+  assert.equal(kind.validate?.({ images: false }), undefined);
+  assert.equal(kind.validate?.({}), undefined);
+  assert.match(kind.validate?.({ images: "yes" }) ?? "", /options.images/);
+  assert.match(kind.validate?.({ images: 1 }) ?? "", /options.images/);
+});
+
+test("c9_1: the codex kind passes options.images to the adapter", async (t) => {
+  const r = rig(t, "ok");
+  const kind = codexKind();
+  const entry = (images: boolean) =>
+    ({
+      id: "bea",
+      runtime: "codex",
+      enabled: true,
+      model: "",
+      effort: "",
+      options: { command: process.execPath, commandArgs: [fixture], images },
+    }) as unknown as AgentEntry;
+  const ctx = { home: r.home, mcpUrl: () => "http://127.0.0.1:4555/mcp", ...HOST_PARTS } as never;
+  const signal = new AbortController().signal;
+  await kind.create(entry(false), ctx).chatTurn(input(), signal);
+  await kind.create(entry(true), ctx).chatTurn(input(), signal);
+  const [off, on] = r.runs();
+  assert.deepEqual(imageValues(off!.argv), ["features.image_generation=false"]);
+  assert.deepEqual(imageValues(on!.argv), ["features.image_generation=true"]);
+});
+
+test("c9_2: the image file of a new turn comes back with the reply, and a resumed turn returns only its own new file", async (t) => {
+  const r = rig(t, "ok");
+  setEnv(t, "FAKE_CODEX_IMAGES", "1");
+  const signal = new AbortController().signal;
+  const one = await r.adapter.chatTurn(input(), signal);
+  const two = await r.adapter.chatTurn(input(), signal);
+  assert.equal(one.kind, "post");
+  assert.equal(one.files?.length, 1);
+  const dir = join(r.home, "codex-home", "generated_images", "01a1fa06-0000-7000-8000-000000000001");
+  const file = one.files![0]!;
+  assert.equal(file.path.startsWith(dir), true);
+  assert.equal(file.mime, "image/png");
+  assert.match(file.name, /\.png$/);
+  assert.equal(two.files?.length, 1, "the file of the first turn is not sent again");
+  assert.notEqual(two.files![0]!.path, file.path);
+});
+
+test("c9_2: a turn with no image has no files key, and an image turn with the tool off is not scanned", async (t) => {
+  const plain = rig(t, "ok");
+  const result = await plain.adapter.chatTurn(input(), new AbortController().signal);
+  assert.equal("files" in result, false);
+  const off = rig(t, "ok", { images: false });
+  setEnv(t, "FAKE_CODEX_IMAGES", "1");
+  const skipped = await off.adapter.chatTurn(input(), new AbortController().signal);
+  assert.equal("files" in skipped, false);
+});
+
+test("c9_2: a pass keeps its image files", async (t) => {
+  const r = rig(t, "ok");
+  setEnv(t, "FAKE_CODEX_IMAGES", "2");
+  setEnv(t, "FAKE_CODEX_REPLY", "[pass]");
+  const result = await r.adapter.chatTurn(input(), new AbortController().signal);
+  assert.equal(result.kind, "pass");
+  assert.equal(result.files?.length, 2);
 });

@@ -6,6 +6,7 @@ import { openDb } from "../src/db/db.ts";
 import { LoungeError, Room } from "../src/lounge/room.ts";
 import { Threads } from "../src/lounge/threads.ts";
 import { Children, MAX_DEPTH } from "../src/threads/children.ts";
+import { Subagents } from "../src/threads/subagents.ts";
 import spawnTool from "../src/mcp/tools/lounge_spawn.ts";
 import type { McpDeps } from "../src/mcp/server.ts";
 import type { TurnOutcome, WorkTurnInput } from "../src/sessions/sessions.ts";
@@ -18,7 +19,7 @@ interface Call {
 }
 
 // Fake runtimes: a turn ends when the test says so. No model runs.
-function setup(t: TestContext) {
+function setup(t: TestContext, subagents?: Subagents) {
   const home = tempHome();
   const db = openDb(join(home.dir, "lounge.db"));
   const room = new Room(db);
@@ -44,7 +45,7 @@ function setup(t: TestContext) {
     gate: (id, from) => children!.mayStart(id, from),
     onTurnEnd: (id, agent, end) => children!.turnEnded(id, agent, end),
   });
-  children = new Children({ db, room, threads });
+  children = new Children({ db, room, threads, ...(subagents ? { subagents } : {}) });
   threads.start();
   t.after(() => {
     threads.stop();
@@ -297,4 +298,24 @@ test("c15_1: a child reply near the room limit still reaches the spawner", async
   const reports = h.room.read(top.id).filter((m) => m.author === "cyd" && m.kind === undefined);
   assert.equal(reports.length, 1);
   assert.ok(reports[0]!.text.includes(long));
+});
+
+test("subagents: a child shows as running at spawn, then done, failed, or stopped", async (t) => {
+  const subagents = new Subagents();
+  const h = setup(t, subagents);
+  const top = root(h);
+  const ok = h.children.spawnChild("ada", top.id, { agent: "cyd", brief: "explore the code\nwith care" });
+  const bad = h.children.spawnChild("ada", top.id, { agent: "dee", brief: "break it" });
+  const stop = h.children.spawnChild("ada", top.id, { agent: "bea", brief: "wait" });
+  assert.deepEqual(subagents.list().map((e) => [e.kind, e.roomId, e.agent, e.threadId, e.title, e.state]), [
+    ["child", top.id, "ada", ok.id, "explore the code", "running"],
+    ["child", top.id, "ada", bad.id, "break it", "running"],
+    ["child", top.id, "ada", stop.id, "wait", "running"],
+  ]);
+  h.turn("cyd", ok.id).finish({ message: h.room.post("cyd", ok.id, "found it") });
+  h.turn("dee", bad.id).fail(new Error("crashed"));
+  await tick();
+  h.children.stopTree("owner", stop.id);
+  await tick();
+  assert.deepEqual(subagents.list().map((e) => e.state), ["done", "failed", "failed"]);
 });

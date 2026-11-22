@@ -1,5 +1,5 @@
 // Fake claude CLI for adapter contract tests.
-// Mode comes from FAKE_CLAUDE_MODE: ok | pass | is_error | exit1_error | exit2 | sleep | version.
+// Mode comes from FAKE_CLAUDE_MODE: ok | pass | subagent | is_error | exit1_error | exit2 | sleep | version.
 import { appendFileSync, readFileSync } from "node:fs";
 
 const mode = process.env.FAKE_CLAUDE_MODE ?? "ok";
@@ -53,6 +53,13 @@ if (mode === "sleep") {
     } else if (mode === "exit1_error") {
       emit("Not logged in", true);
       process.exitCode = 1;
+    } else if (mode === "subagent") {
+      // A Task call and its result, as stream-json lines, before the reply.
+      const tool = { type: "tool_use", id: "toolu_sub", name: "Task", input: { description: "Find the tests" } };
+      process.stdout.write(JSON.stringify({ type: "assistant", message: { content: [tool] } }) + "\n");
+      const result = { type: "tool_result", tool_use_id: "toolu_sub", content: "found" };
+      process.stdout.write(JSON.stringify({ type: "user", message: { content: [result] } }) + "\n");
+      emit("hello from fake", false);
     } else if (mode === "exit2") {
       process.stderr.write("first\nlast stderr line\n");
       process.exit(2);

@@ -7,7 +7,7 @@ import { unavailableAdapter } from "../src/adapters/stub.ts";
 import type { Adapter, AdapterLookup } from "../src/adapters/types.ts";
 import { HOOK_FILE, coreKinds } from "../src/adapters/runtimes.ts";
 import { chatPrompt, isPass, systemText, turnText } from "../src/adapters/prompt.ts";
-import { claudeToolLines, lineSplitter, toolLine } from "../src/adapters/activity.ts";
+import { claudeSubagents, claudeToolLines, lineSplitter, toolLine } from "../src/adapters/activity.ts";
 import { Roster } from "../src/roster/roster.ts";
 import type { AgentEntry, RuntimeContext, RuntimeKind } from "../src/roster/types.ts";
 import { RestrictedTokens } from "../src/auth/restricted.ts";
@@ -64,7 +64,7 @@ export const SEED_CALLERS: readonly string[] = ["owner", ...SEED_AGENTS];
 export const HOST_PARTS = {
   hookFile: HOOK_FILE,
   prompt: { systemText, turnText, chatPrompt, isPass },
-  activity: { claudeToolLines, lineSplitter, toolLine },
+  activity: { claudeToolLines, claudeSubagents, lineSplitter, toolLine },
 };
 
 // The core kinds plus stand-ins for the seed runtimes.

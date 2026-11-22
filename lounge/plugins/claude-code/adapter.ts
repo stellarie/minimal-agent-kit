@@ -17,7 +17,7 @@ export interface ClaudeAdapterOptions {
   // The core passes its guard hook; the adapter never guesses it.
   hookFile: string;
   prompt: Pick<RuntimeContext["prompt"], "systemText" | "turnText" | "isPass">;
-  activity: Pick<RuntimeContext["activity"], "claudeToolLines" | "lineSplitter">;
+  activity: Pick<RuntimeContext["activity"], "claudeToolLines" | "claudeSubagents" | "lineSplitter">;
   // An empty value sends no flag.
   model?: string;
   effort?: string;
@@ -261,25 +261,25 @@ export class ClaudeAdapter implements Adapter {
 
       child.stdout?.setEncoding("utf8");
       child.stderr?.setEncoding("utf8");
-      const onActivity = input.onActivity;
-      const { claudeToolLines, lineSplitter } = this.opts.activity;
-      const feed = onActivity
-        ? lineSplitter((line) => {
-            let ev: unknown;
-            try {
-              ev = JSON.parse(line);
-            } catch {
-              return;
-            }
-            for (const tool of claudeToolLines(ev)) {
+      const { onActivity, onSubagent } = input;
+      const { claudeToolLines, claudeSubagents, lineSplitter } = this.opts.activity;
+      const feed =
+        onActivity || onSubagent
+          ? lineSplitter((line) => {
+              let ev: unknown;
               try {
-                onActivity(tool);
-              } catch (err) {
-                console.error("onActivity failed:", err);
+                ev = JSON.parse(line);
+              } catch {
+                return;
               }
-            }
-          })
-        : undefined;
+              try {
+                if (onActivity) for (const tool of claudeToolLines(ev)) onActivity(tool);
+                if (onSubagent) for (const sub of claudeSubagents(ev)) onSubagent(sub);
+              } catch (err) {
+                console.error("activity listener failed:", err);
+              }
+            })
+          : undefined;
       child.stdout?.on("data", (d: string) => {
         stdout += d;
         feed?.(d);

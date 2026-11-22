@@ -1,6 +1,7 @@
 // Fake codex CLI for the sign-in tests. FAKE_CODEX_MODE: ok | hang | fail.
 // `login` prints a URL, then writes auth.json into CODEX_HOME, as the real CLI does after sign-in.
-import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
 const argv = process.argv.slice(2);
@@ -39,6 +40,9 @@ if (at >= 0 && argv[at + 1] === "status") {
 
 // `exec --json` replays the event shapes of a real codex run (codex-cli 0.167).
 // FAKE_CODEX_EXEC: ok | blocked | silent | fail | hang.
+// FAKE_CODEX_IMAGES=n: the turn also saves n PNG files in $CODEX_HOME/generated_images/<thread>/.
+// The real codex 0.167 does that and emits no event for it.
+// FAKE_CODEX_REPLY: the text of the last agent_message.
 function exec() {
   const execMode = process.env.FAKE_CODEX_EXEC ?? "ok";
   let stdin = "";
@@ -83,9 +87,22 @@ function exec() {
       out({ type: "item.completed", item: { id: "item_1", type: "agent_message", text: "I will check the status once." } });
       out({ type: "item.started", item: { id: "item_2", type: "command_execution", command: "git status --short", exit_code: null, status: "in_progress" } });
       out({ type: "item.completed", item: { id: "item_2", type: "command_execution", command: "git status --short", aggregated_output: "", exit_code: 0, status: "completed" } });
-      out({ type: "item.completed", item: { id: "item_3", type: "agent_message", text: resumeAt >= 0 ? "PINEAPPLE" : "Status is clean." } });
+      const reply = process.env.FAKE_CODEX_REPLY ?? (resumeAt >= 0 ? "PINEAPPLE" : "Status is clean.");
+      out({ type: "item.completed", item: { id: "item_3", type: "agent_message", text: reply } });
     }
+    saveImages(thread);
     out({ type: "turn.completed", usage: { input_tokens: 1, output_tokens: 1 } });
     process.exit(0);
   });
+}
+
+// 1x1 PNG.
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+
+function saveImages(thread) {
+  const count = Number(process.env.FAKE_CODEX_IMAGES ?? "0");
+  if (!(count > 0)) return;
+  const dir = join(home, "generated_images", thread);
+  mkdirSync(dir, { recursive: true });
+  for (let i = 0; i < count; i++) writeFileSync(join(dir, `exec-${randomUUID()}.png`), PNG);
 }

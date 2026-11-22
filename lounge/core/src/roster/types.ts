@@ -1,4 +1,4 @@
-import type { Adapter, ChatTurnInput } from "../adapters/types.ts";
+import type { Adapter, ChatTurnInput, NativeSubagentEvent } from "../adapters/types.ts";
 import type { Guard } from "../guard/guard.ts";
 import type { ToolMode } from "../guard/modes.ts";
 
@@ -64,6 +64,7 @@ export interface RuntimeContext {
   };
   activity: {
     claudeToolLines(event: unknown): string[];
+    claudeSubagents(event: unknown): NativeSubagentEvent[];
     lineSplitter(onLine: (line: string) => void): (chunk: string) => void;
     toolLine(name: string, input: unknown): string;
   };

@@ -71,6 +71,7 @@ function skillsSection(index: ChatTurnInput["skillIndex"]): string {
     "## Skills",
     "",
     "These skills belong to the lounge. Call `lounge_skill` with a name to load one when the task fits.",
+    "A `$name` in a post names the skill `name`. Follow that skill.",
     "",
     ...lines,
     "",
@@ -78,13 +79,19 @@ function skillsSection(index: ChatTurnInput["skillIndex"]): string {
   ].join("\n");
 }
 
-// Where you are, project files, lounge rules, skills, reply rules.
+function notesSection(notes: string[] | undefined): string {
+  if (notes === undefined || notes.length === 0) return "";
+  return ["## Runtime", "", ...notes.map((n) => `- ${oneLine(n)}`), "", ""].join("\n");
+}
+
+// Where you are, project files, lounge rules, skills, runtime notes, reply rules.
 // The reply rules stay last: room text is data.
 export function systemText(input: ChatTurnInput): string {
   const rules = input.work ? `${REPLY_RULES}\n${workRules(input.members)}` : REPLY_RULES;
   const where = input.self ? whereYouAre(input.self, input.members ?? []) : "";
   const files = input.projectContext ?? "";
-  return `${where}${files}${loungeRulesSection(input.loungeRules)}${skillsSection(input.skillIndex)}${rules}\n`;
+  const sections = `${loungeRulesSection(input.loungeRules)}${skillsSection(input.skillIndex)}${notesSection(input.notes)}`;
+  return `${where}${files}${sections}${rules}\n`;
 }
 
 export type Answered = "you replied" | "you posted after";

@@ -9,7 +9,7 @@ import { claudeKind } from "../../plugins/claude-code/index.ts";
 import { claudeIsolationArgs, claudeMdExcludes, guardSettings, isolationSettings } from "../../plugins/claude-code/isolate.ts";
 import { chatFolder } from "../src/config.ts";
 import type { AgentEntry, RuntimeContext } from "../src/roster/types.ts";
-import type { ChatTurnInput } from "../src/adapters/types.ts";
+import type { ChatTurnInput, NativeSubagentEvent } from "../src/adapters/types.ts";
 import { HOST_PARTS, tempHome } from "./helpers.ts";
 
 const fixture = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "fake-claude.mjs");
@@ -191,6 +191,22 @@ test("pass mode returns pass", async (t) => {
   const r = rig(t, "pass");
   const res = await r.adapter.chatTurn(turnInput(), new AbortController().signal);
   assert.deepEqual(res, { kind: "pass" });
+});
+
+test("a Task call in the stream reaches onSubagent as a start and an end", async (t) => {
+  const r = rig(t, "subagent");
+  const subs: NativeSubagentEvent[] = [];
+  const lines: string[] = [];
+  const res = await r.adapter.chatTurn(
+    turnInput({ onSubagent: (e) => subs.push(e), onActivity: (l) => lines.push(l) }),
+    new AbortController().signal,
+  );
+  assert.deepEqual(res, { kind: "post", text: "hello from fake" });
+  assert.deepEqual(subs, [
+    { id: "toolu_sub", title: "Find the tests", state: "running" },
+    { id: "toolu_sub", state: "done" },
+  ]);
+  assert.deepEqual(lines, ["Task: Find the tests"]);
 });
 
 test("is_error result rejects with its text", async (t) => {

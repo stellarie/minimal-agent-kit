@@ -31,6 +31,19 @@ export interface NearThread {
   last: string;
 }
 
+export type SubagentState = "running" | "done" | "failed";
+
+// A runtime's own subagent: a Claude Task or Agent call, or a Codex collab agent.
+export interface NativeSubagentEvent {
+  // The tool call id, or the agent id of the runtime.
+  id: string;
+  // Set on the start, and on an end with no start that must still show.
+  title?: string;
+  // A second id that later events of the same subagent use.
+  alias?: string;
+  state: SubagentState;
+}
+
 export interface ChatTurnInput {
   agent: Agent;
   brief: string;
@@ -40,6 +53,8 @@ export interface ChatTurnInput {
   work?: { cwd: string };
   // One line per tool call, as it happens.
   onActivity?(line: string): void;
+  // Each start and end of a runtime subagent, as it happens.
+  onSubagent?(event: NativeSubagentEvent): void;
   context: Message[];
   // Display names that callers chose.
   names?: Record<string, string>;
@@ -68,10 +83,22 @@ export interface ChatTurnInput {
   skillIndex?: { name: string; description: string }[];
   // The skills that the owner's last post named with $name, with their bodies.
   skillBodies?: { name: string; body: string }[];
+  // One line each, for facts of the runtime. A runtime plugin sets them.
+  notes?: string[];
   onSlow(): void;
 }
 
-export type ChatTurnResult = { kind: "post"; text: string } | { kind: "pass" };
+// A file that the runtime made in a turn, such as an image of its image tool.
+// The core saves it as an attachment of the reply.
+export interface TurnFile {
+  name: string;
+  // The local file to read.
+  path: string;
+  mime: string;
+}
+
+// files: unset when the turn made none. A pass keeps them too.
+export type ChatTurnResult = { kind: "post"; text: string; files?: TurnFile[] } | { kind: "pass"; files?: TurnFile[] };
 
 // Finds a runtime by agent id.
 export interface AdapterLookup {

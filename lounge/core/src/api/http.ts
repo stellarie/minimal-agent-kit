@@ -19,6 +19,7 @@ import { LoungeError, Room, cleanNickname } from "../lounge/room.ts";
 import { Events, eventText } from "../lounge/events.ts";
 import { Threads } from "../lounge/threads.ts";
 import { Children } from "../threads/children.ts";
+import { Subagents } from "../threads/subagents.ts";
 import { Attachments, INLINE, MAX_ATTACHMENT, attachmentPath } from "../lounge/attachments.ts";
 import { ProfileFiles } from "../lounge/files.ts";
 import { readBoard } from "../blackboard/blackboard.ts";
@@ -41,7 +42,7 @@ import { RestrictedTokens } from "../auth/restricted.ts";
 import { AdapterPool } from "../adapters/index.ts";
 import { HOOK_FILE, coreKinds, mergeKinds } from "../adapters/runtimes.ts";
 import { chatPrompt, isPass, systemText, turnText } from "../adapters/prompt.ts";
-import { claudeToolLines, lineSplitter, toolLine } from "../adapters/activity.ts";
+import { claudeSubagents, claudeToolLines, lineSplitter, toolLine } from "../adapters/activity.ts";
 import { Sessions } from "../sessions/sessions.ts";
 import { seedSkills } from "../skills/seed.ts";
 import { Skills, withSkills } from "../skills/skills.ts";
@@ -316,13 +317,14 @@ export async function startCore(opts: {
     guard,
     secrets: () => Object.values(tokens),
     prompt: withContext(withSkills({ systemText, turnText, chatPrompt, isPass }, skills), roster, wikiSetup),
-    activity: { claudeToolLines, lineSplitter, toolLine },
+    activity: { claudeToolLines, claudeSubagents, lineSplitter, toolLine },
     log: (line) => console.log(line),
   };
   const adapters = new AdapterPool(roster, kinds, ctx);
   // Read once; PUT keeps this copy current.
   let loungeRules = readSetting(db, LOUNGE_RULES_KEY) ?? "";
   const wiki = new Wiki(wikiSetup);
+  const attachments = new Attachments({ db, home: opts.home, now: opts.now });
   const sessions = new Sessions({
     db,
     room,
@@ -332,6 +334,7 @@ export async function startCore(opts: {
     roster,
     restricted,
     grants,
+    attachments,
     runtimeInfo: (entry) => {
       const kind = roster.kind(entry.runtime);
       // A model hint is a hint: an empty model means the runtime's own default.
@@ -362,6 +365,7 @@ export async function startCore(opts: {
   });
   const events = new Events({ db, room, now: opts.now });
   events.onFire((e) => scheduler.announce(e.roomId, eventText(e)));
+  const subagents = new Subagents({ now: opts.now });
   const threads = new Threads({
     db,
     room,
@@ -372,13 +376,13 @@ export async function startCore(opts: {
     log: (line) => console.log(line),
     gate: (id, from) => children.mayStart(id, from),
     onTurnEnd: (id, agent, end) => children.turnEnded(id, agent, end),
+    subagents,
   });
   const gates = new Gates({ db, room, threads, now: opts.now });
   // Gate cards wait in the same stack as guard cards, oldest first.
   const queue = () => [...approvals.pending(), ...gates.cards()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   // A stopped child's open gate must not post its decision as a live owner post.
-  const children = new Children({ db, room, threads, onStop: (id) => gates.stopRoom(id) });
-  const attachments = new Attachments({ db, home: opts.home, now: opts.now });
+  const children = new Children({ db, room, threads, onStop: (id) => gates.stopRoom(id), subagents });
   const reveal = opts.reveal ?? revealDefault();
   attachments.sweep();
   // The lounge home holds the tokens: keep it out.
@@ -1127,6 +1131,8 @@ export async function startCore(opts: {
     events.onChange((event) => broadcast({ type: "scheduled", event })),
     updates.onChange((update) => broadcast({ type: "update", update })),
     threads.onWork((w) => broadcast({ type: "work", ...w })),
+    subagents.onChange((subagent) => broadcast({ type: "subagent", subagent })),
+    room.onRemove((ids) => subagents.removeRooms(ids)),
     room.onLayout((l) => broadcast({ type: "layout", ...l })),
     roster.onChange((id, kind) => broadcast({ type: "roster", id, kind })),
     // A plugin change adds or drops runtimes: probe again, and tell the UI.
@@ -1149,6 +1155,7 @@ export async function startCore(opts: {
   wss.on("connection", (ws) => {
     for (const t of room.typing()) ws.send(JSON.stringify({ type: "typing", ...t }));
     for (const w of threads.work()) ws.send(JSON.stringify({ type: "work", ...w, active: true }));
+    for (const s of subagents.list()) ws.send(JSON.stringify({ type: "subagent", subagent: s }));
     ws.send(JSON.stringify({ type: "layout", ...room.layout() }));
     ws.send(JSON.stringify({ type: "approval", pending: queue() }));
   });

@@ -166,6 +166,24 @@ test("systemText: empty or blank lounge rules add no section; a work turn gets t
   assert.ok(work.indexOf("Answer in haiku.") < work.indexOf("This is a work thread"));
 });
 
+test("systemText: runtime notes get their own section after the skills and before the reply rules", () => {
+  const text = systemText(
+    input({
+      self: SELF,
+      skillIndex: [{ name: "wiki", description: "Reads the wiki." }],
+      notes: ["You can make images.", "A second line."],
+    }),
+  );
+  assert.match(text, /^## Runtime\n\n- You can make images\.\n- A second line\.\n\n/m);
+  assert.ok(text.indexOf("## Skills") < text.indexOf("## Runtime"));
+  assert.ok(text.indexOf("## Runtime") < text.indexOf("- You may use your tools."));
+});
+
+test("systemText: no notes, or an empty list, add no Runtime section", () => {
+  assert.doesNotMatch(systemText(input({ self: SELF })), /Runtime/);
+  assert.doesNotMatch(systemText(input({ self: SELF, notes: [] })), /## Runtime/);
+});
+
 test("turnText: omitted context messages show one line before the messages", () => {
   const lines = turnText(
     input({ omitted: 7, context: [{ id: 9, roomId: "games", author: "cyd", text: "yay", createdAt: "x" }] }),

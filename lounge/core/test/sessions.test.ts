@@ -2,12 +2,13 @@ import { Grants } from "../src/auth/grants.ts";
 import { driveRoots } from "../src/guard/drives.ts";
 import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Adapter, ChatTurnInput, ChatTurnResult } from "../src/adapters/types.ts";
 import { RestrictedTokens } from "../src/auth/restricted.ts";
 import { defaultConfig, type LoungeConfig } from "../src/config.ts";
 import { openDb } from "../src/db/db.ts";
+import { Attachments } from "../src/lounge/attachments.ts";
 import { Room } from "../src/lounge/room.ts";
 import { Sessions, type SessionsOptions } from "../src/sessions/sessions.ts";
 import type { TimerApi } from "../src/sessions/slots.ts";
@@ -57,6 +58,7 @@ function setup(
   const adapters = { get: () => adapter };
   const roster = testRoster(db, config);
   const restricted = new RestrictedTokens();
+  const attachments = new Attachments({ db, home: home.dir });
   const make = () =>
     new Sessions({
       db,
@@ -66,6 +68,7 @@ function setup(
       adapters,
       roster,
       restricted,
+      attachments,
       timers: opts.timers,
       ...opts.sessions,
     });
@@ -77,7 +80,7 @@ function setup(
     home.cleanup();
   });
   const count = (sql: string) => Number((db.prepare(sql).get() as { n: number }).n);
-  return { db, room, roster, sessions, adapter, restricted, config, make, count, homeDir: home.dir };
+  return { db, room, roster, sessions, adapter, restricted, config, make, count, attachments, homeDir: home.dir };
 }
 
 test("sessions: chat grants follow the spec table", async (t) => {
@@ -454,6 +457,123 @@ test("sessions: a turn that already posted here with lounge_post does not post i
     h.room.read("lounge").filter((m) => m.author === "ada").map((m) => m.text),
     ["the real answer"],
   );
+});
+
+// A file that a runtime made in the turn: an image of its image tool.
+function turnFile(h: { homeDir: string }, name: string, bytes = "PNGDATA"): { name: string; path: string; mime: string } {
+  const path = join(h.homeDir, `made-${name}`);
+  writeFileSync(path, bytes);
+  return { name, path, mime: "image/png" };
+}
+
+test("sessions: image files of a reply post as attachments of the reply and count as posted", async (t) => {
+  const h = setup(t);
+  const outcome = h.sessions.roomTurn("ada", "lounge", "Draw it.");
+  await waitFor(() => h.adapter.turns.length === 1, "turn start");
+  h.adapter.turns[0]!.resolve({ kind: "post", text: "here you go", files: [turnFile(h, "a.png", "ONE")] });
+  const message = (await outcome).message!;
+  assert.equal(message.text, "here you go");
+  assert.equal(message.attachments?.length, 1);
+  const att = message.attachments![0]!;
+  assert.deepEqual([att.name, att.mime, att.size], ["a.png", "image/png", 3]);
+  assert.equal(h.attachments.read(att.id).toString(), "ONE");
+  assert.equal(h.attachments.get(att.id)?.id, att.id);
+  assert.equal(h.attachments.rooms(att.id)[0], "lounge");
+  assert.equal(h.db.prepare("SELECT posted FROM attachments WHERE id = ?").get(att.id)?.posted, 1, "the sweep keeps it");
+  assert.equal(h.room.read("lounge").filter((m) => m.author === "ada").length, 1, "one message, not two");
+});
+
+test("sessions: a pass keeps its image files: they post with no text", async (t) => {
+  const h = setup(t);
+  const outcome = h.sessions.roomTurn("ada", "lounge", "Draw it.");
+  await waitFor(() => h.adapter.turns.length === 1, "turn start");
+  h.adapter.turns[0]!.resolve({ kind: "pass", files: [turnFile(h, "a.png")] });
+  const message = (await outcome).message!;
+  assert.equal(message.text, "");
+  assert.equal(message.attachments?.length, 1);
+});
+
+test("sessions: an empty reply keeps its image files", async (t) => {
+  const h = setup(t);
+  const outcome = h.sessions.roomTurn("ada", "lounge", "Draw it.");
+  await waitFor(() => h.adapter.turns.length === 1, "turn start");
+  h.adapter.turns[0]!.resolve({ kind: "post", text: "  ", files: [turnFile(h, "a.png")] });
+  assert.equal((await outcome).message?.attachments?.length, 1);
+});
+
+test("sessions: a turn that posted with lounge_post still posts its image files, and not its final text", async (t) => {
+  const h = setup(t);
+  const outcome = h.sessions.roomTurn("ada", "lounge", "Draw it.");
+  await waitFor(() => h.adapter.turns.length === 1, "turn start");
+  h.room.post("ada", "lounge", "the real answer");
+  h.adapter.turns[0]!.resolve({ kind: "post", text: "Posted to #lounge: the real answer", files: [turnFile(h, "a.png")] });
+  const message = (await outcome).message!;
+  assert.equal(message.attachments?.length, 1);
+  assert.deepEqual(
+    h.room.read("lounge").filter((m) => m.author === "ada").map((m) => m.text),
+    ["the real answer", ""],
+  );
+});
+
+test("sessions: a redo keeps the image files of the first run and posts them once", async (t) => {
+  const h = setup(t);
+  const outcome = h.sessions.roomTurn("ada", "lounge", "Draw it.");
+  await waitFor(() => h.adapter.turns.length === 1, "turn start");
+  h.adapter.turns[0]!.resolve({ kind: "post", text: "a".repeat(2001), files: [turnFile(h, "a.png")] });
+  await waitFor(() => h.adapter.turns.length === 2, "the redo");
+  h.adapter.turns[1]!.resolve({ kind: "post", text: "short", files: [turnFile(h, "b.png")] });
+  const message = (await outcome).message!;
+  assert.equal(message.text, "short");
+  assert.deepEqual(message.attachments?.map((a) => a.name), ["a.png", "b.png"]);
+  assert.equal(h.room.read("lounge").filter((m) => m.author === "ada").length, 1);
+});
+
+test("sessions: a reply that stays over the limit still posts its image files with the event", async (t) => {
+  const h = setup(t);
+  const outcome = h.sessions.roomTurn("ada", "lounge", "Draw it.");
+  for (let i = 0; i < 3; i++) {
+    await waitFor(() => h.adapter.turns.length === i + 1, `turn ${i + 1}`);
+    h.adapter.turns[i]!.resolve({ kind: "post", text: "c".repeat(2500), files: i === 0 ? [turnFile(h, "a.png")] : [] });
+  }
+  const result = await outcome;
+  assert.equal(result.message?.attachments?.length, 1);
+  const added = h.room.read("lounge").filter((m) => m.author === "ada");
+  assert.deepEqual(added.map((m) => m.kind ?? "text"), ["event", "text"]);
+});
+
+test("sessions: a file that cannot be saved is skipped and the reply still posts", async (t) => {
+  const h = setup(t);
+  const outcome = h.sessions.roomTurn("ada", "lounge", "Draw it.");
+  await waitFor(() => h.adapter.turns.length === 1, "turn start");
+  const missing = { name: "gone.png", path: join(h.homeDir, "nowhere.png"), mime: "image/png" };
+  const empty = turnFile(h, "empty.png", "");
+  h.adapter.turns[0]!.resolve({ kind: "post", text: "text stays", files: [missing, empty, turnFile(h, "ok.png")] });
+  const message = (await outcome).message!;
+  assert.equal(message.text, "text stays");
+  assert.deepEqual(message.attachments?.map((a) => a.name), ["ok.png"]);
+});
+
+test("sessions: a turn with only unsaveable files and no text posts nothing and does not fail", async (t) => {
+  const h = setup(t);
+  const outcome = h.sessions.roomTurn("ada", "lounge", "Draw it.");
+  await waitFor(() => h.adapter.turns.length === 1, "turn start");
+  h.adapter.turns[0]!.resolve({ kind: "pass", files: [{ name: "gone.png", path: join(h.homeDir, "nowhere.png"), mime: "image/png" }] });
+  assert.equal((await outcome).message, undefined);
+});
+
+test("sessions: a work thread reply posts its image files too", async (t) => {
+  const h = setup(t);
+  const outcome = h.sessions.workTurn({
+    agent: "ada",
+    roomId: "lounge",
+    cwd: h.homeDir,
+    brief: "work",
+    onActivity: () => {},
+  });
+  await waitFor(() => h.adapter.turns.length === 1, "work turn");
+  h.adapter.turns[0]!.resolve({ kind: "post", text: "drawn", files: [turnFile(h, "a.png")] });
+  await outcome;
+  assert.equal(h.room.read("lounge").find((m) => m.text === "drawn")?.attachments?.length, 1);
 });
 
 test("sessions: a post in another room or by another agent keeps the final text", async (t) => {

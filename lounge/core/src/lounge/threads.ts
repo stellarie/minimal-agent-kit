@@ -6,6 +6,7 @@ import type { Roster } from "../roster/roster.ts";
 import { mentions } from "../scheduler/scheduler.ts";
 import type { NearThread } from "../adapters/types.ts";
 import type { TurnOutcome, WorkTurnInput } from "../sessions/sessions.ts";
+import type { Subagents } from "../threads/subagents.ts";
 import { isThread, LoungeError, MAX_REPORT_POST, type Channel, type Message, type Room } from "./room.ts";
 
 export interface ThreadInfo extends Channel {
@@ -54,6 +55,8 @@ export interface ThreadsOptions {
   gate?: (roomId: string, from?: Caller | "self") => boolean;
   // A turn ended without a stop.
   onTurnEnd?: (roomId: string, agent: Agent, end: TurnEnd) => void;
+  // The runtime subagents of each turn.
+  subagents?: Pick<Subagents, "native" | "settle">;
 }
 
 export interface TurnEnd {
@@ -369,6 +372,10 @@ export class Threads {
                 this.#opts.room.post(agent, info.id, line, "tool");
                 this.#emit({ agent, roomId: info.id, active: true, tool: line });
               },
+              onSubagent: (ev) => {
+                if (run.controller.signal.aborted) return;
+                this.#opts.subagents?.native(info.id, agent, ev);
+              },
             },
             run.controller.signal,
           );
@@ -395,6 +402,8 @@ export class Threads {
     } finally {
       this.#runs.delete(key);
       this.#emit({ agent, roomId: info.id, active: false });
+      // A stop or an error fails the subagents that still run.
+      this.#opts.subagents?.settle(info.id, agent, end === undefined || end.failed !== undefined);
       if (end) this.#opts.onTurnEnd?.(info.id, agent, end);
     }
   }

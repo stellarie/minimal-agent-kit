@@ -5,12 +5,13 @@
   import { formatSize } from "../lib/embeds.ts";
   import Initial from "./Initial.svelte";
 
-  // mentions: after an @. channels: after a #.
+  // mentions: after an @. channels: after a #. skills: after a $.
   let {
     disabled,
     channel,
     mentions = [],
     channels = [],
+    skills = [],
     onSend,
     onUpload,
   }: {
@@ -18,6 +19,7 @@
     channel: string;
     mentions?: Item[];
     channels?: Item[];
+    skills?: Item[];
     onSend: (text: string, files: Attachment[]) => Promise<void>;
     onUpload: (file: File) => Promise<Attachment>;
   } = $props();
@@ -40,7 +42,9 @@
   const lists = $derived<Record<TriggerKind, Item[]>>({
     "@": mentions,
     "#": channels,
+    $: skills,
   });
+  const LIST_LABEL: Record<TriggerKind, string> = { "@": "Agents", "#": "Channels", $: "Skills" };
   const items = $derived(found ? filter(lists[found.kind], found.query) : []);
   const open = $derived(items.length > 0 && !dismissed);
   const kindKey = $derived(found ? `${found.kind}${found.start}` : "");
@@ -192,7 +196,7 @@
     />
     <div class="box">
       {#if open && found}
-        <ul class="suggest" id="composer-list" role="listbox" aria-label={found.kind === "@" ? "Agents" : "Channels"}>
+        <ul class="suggest" id="composer-list" role="listbox" aria-label={LIST_LABEL[found.kind]}>
           {#each items as item, i (item.value)}
             <li
               id="composer-option-{i}"
@@ -241,7 +245,7 @@
     </button>
   </div>
   <p id="composer-hint" class="hint">
-    Enter sends. Shift+Enter adds a line. Paste or drop files to attach. Type @ for an agent and # for a channel.
+    Enter sends. Shift+Enter adds a line. Paste or drop files to attach. Type @ for an agent, # for a channel, and $ for a skill.
     {#if text.length > MAX_TEXT - 400}
       <span class:over={tooLong}>{text.length} / {MAX_TEXT}</span>
     {/if}

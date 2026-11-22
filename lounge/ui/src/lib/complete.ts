@@ -1,4 +1,4 @@
-export type TriggerKind = "@" | "#";
+export type TriggerKind = "@" | "#" | "$";
 
 export interface Trigger {
   kind: TriggerKind;
@@ -17,20 +17,21 @@ export const MAX_ITEMS = 8;
 
 const QUERY_CHAR = /[a-z0-9-]/i;
 
-// A query starts with a letter. A channel id can start with a digit.
+// A query starts with a letter. A channel id or a skill name can start with a digit.
 const QUERY_START: Record<TriggerKind, RegExp> = {
   "@": /^[a-z]/i,
   "#": /^[a-z0-9]/i,
+  $: /^[a-z0-9]/i,
 };
 
-// The word before the caret, when it starts with @ or #.
+// The word before the caret, when it starts with @, #, or $.
 export function trigger(text: string, caret: number): Trigger | null {
   let at = Math.min(Math.max(caret, 0), text.length);
   const end = at;
   while (at > 0 && QUERY_CHAR.test(text[at - 1]!)) at -= 1;
   if (at === 0) return null;
   const kind = text[at - 1];
-  if (kind !== "@" && kind !== "#") return null;
+  if (kind !== "@" && kind !== "#" && kind !== "$") return null;
   const start = at - 1;
   // A mail address or a markdown heading is no trigger.
   if (start > 0 && !/\s/.test(text[start - 1]!)) return null;
@@ -41,7 +42,7 @@ export function trigger(text: string, caret: number): Trigger | null {
 
 // "@nana" matches "na" by its name, not by its @.
 function bare(value: string): string {
-  return /^[@#]/.test(value) ? value.slice(1) : value;
+  return /^[@#$]/.test(value) ? value.slice(1) : value;
 }
 
 // Prefix matches first, then substring matches. Each group keeps its order.

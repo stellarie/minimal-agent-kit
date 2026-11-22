@@ -7,7 +7,8 @@ import { systemText, turnText } from "../src/adapters/prompt.ts";
 import { defaultConfig, SEED_AGENTS } from "../src/config.ts";
 import { openDb } from "../src/db/db.ts";
 import { LoungeError, Room } from "../src/lounge/room.ts";
-import { Threads, type WorkEvent } from "../src/lounge/threads.ts";
+import { Threads, type ThreadsOptions, type WorkEvent } from "../src/lounge/threads.ts";
+import { Subagents } from "../src/threads/subagents.ts";
 import type { TurnOutcome, WorkTurnInput } from "../src/sessions/sessions.ts";
 import { tempHome, testRoster } from "./helpers.ts";
 
@@ -18,7 +19,7 @@ interface Call {
   fail(err: Error): void;
 }
 
-function setup(t: TestContext, disabled: string[] = []) {
+function setup(t: TestContext, disabled: string[] = [], extra: Partial<ThreadsOptions> = {}) {
   const home = tempHome();
   const db = openDb(join(home.dir, "lounge.db"));
   const room = new Room(db);
@@ -36,7 +37,7 @@ function setup(t: TestContext, disabled: string[] = []) {
   // Every agent works unless a test disables one.
   for (const name of SEED_AGENTS) config.adapters[name].enabled = !disabled.includes(name);
   const roster = testRoster(db, config);
-  const threads = new Threads({ db, room, home: home.dir, roster, turns });
+  const threads = new Threads({ db, room, home: home.dir, roster, turns, ...extra });
   const work: WorkEvent[] = [];
   threads.onWork((w) => work.push(w));
   threads.start();
@@ -95,6 +96,22 @@ test("threads: tool activity posts tool lines and work events", async (t) => {
       ["cyd", false, ""],
     ],
   );
+});
+
+test("threads: runtime subagents go to the store and end with the turn", async (t) => {
+  const subagents = new Subagents();
+  const h = setup(t, [], { subagents });
+  const info = h.threads.create("owner", { channel: "lounge", title: "Work", brief: "go", lead: "cyd" });
+  h.calls[0]!.input.onSubagent!({ id: "t1", title: "Find tests", state: "running" });
+  h.calls[0]!.input.onSubagent!({ id: "t2", title: "Read docs", state: "running" });
+  h.calls[0]!.input.onSubagent!({ id: "t1", state: "done" });
+  assert.deepEqual(subagents.list().map((e) => [e.roomId, e.agent, e.id, e.state]), [
+    [info.id, "cyd", "t1", "done"],
+    [info.id, "cyd", "t2", "running"],
+  ]);
+  h.calls[0]!.fail(new Error("boom"));
+  await tick();
+  assert.deepEqual(subagents.list().map((e) => e.state), ["done", "failed"]);
 });
 
 test("threads: an agent mention hands work over; a busy agent runs again once", async (t) => {

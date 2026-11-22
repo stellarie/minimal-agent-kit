@@ -5,7 +5,8 @@ import type { Adapter, ChatTurnInput, ChatTurnResult } from "../../core/src/adap
 import { chatFolder } from "../../core/src/config.ts";
 import type { AgentEntry, RuntimeContext, RuntimeKind } from "../../core/src/roster/types.ts";
 import { readCodexCatalog } from "./catalog.ts";
-import { readLine, stderrActivity, type CodexRun } from "./events.ts";
+import { collabEvents, readLine, stderrActivity, type CodexRun } from "./events.ts";
+import { imageNames, newImages } from "./images.ts";
 import { codexIsolationArgs, codexSignInReason } from "./isolate.ts";
 import { locateCodex } from "./locate.ts";
 import { codexStdin } from "./rules.ts";
@@ -42,6 +43,8 @@ export interface CodexAdapterOptions {
   effort?: string;
   // read-only, workspace-write, or danger-full-access. Unset: workspace-write.
   sandbox?: string;
+  // The image tool of codex. Unset: on.
+  images?: boolean;
   // Where to look for codex. Unset: this process.
   env?: NodeJS.ProcessEnv;
 }
@@ -54,6 +57,11 @@ export function guardHook(hookFile: string): CodexHookEntry {
 // Sent on every turn: exec resume has no -s, and a config override works for both.
 export function sandboxArgs(sandbox: string = DEFAULT_SANDBOX): string[] {
   return ["-c", `sandbox_mode=${JSON.stringify(sandbox)}`, "-c", `windows.sandbox=${JSON.stringify(WINDOWS_SANDBOX)}`];
+}
+
+// Sent on every turn too. codex 0.167 has the tool on by default: a pinned value keeps a later default out.
+export function imageArgs(images: boolean = true): string[] {
+  return ["-c", `features.image_generation=${images}`];
 }
 
 // The lounge MCP server of this turn. The token comes from the environment, so it stays out of the command line.
@@ -124,11 +132,15 @@ export class CodexAdapter implements Adapter {
       ? ["exec", "resume", threadId, "--json", "--skip-git-repo-check"]
       : ["exec", "--json", "--skip-git-repo-check", "-C", windowsPath(workDir)];
     if (this.#opts.model) tail.push("-m", this.#opts.model);
-    const { text: stdin, hash } = codexStdin(thread, input, this.#opts.prompt);
+    const images = this.#opts.images !== false;
+    // A new thread has no folder yet; a resumed one may hold the images of earlier turns.
+    const seen = images && threadId ? imageNames(home, threadId) : new Set<string>();
+    const { text: stdin, hash } = codexStdin(thread, input, this.#opts.prompt, images);
     const args = [
       ...commandArgs,
       ...isolation.args,
       ...sandboxArgs(this.#opts.sandbox),
+      ...imageArgs(images),
       ...mcpArgs(this.#opts.mcpUrl()),
       ...(this.#opts.effort ? ["-c", `model_reasoning_effort=${this.#opts.effort}`] : []),
       ...codexSubagentArgs([guardHook(this.#opts.hookFile)]),
@@ -152,7 +164,9 @@ export class CodexAdapter implements Adapter {
     if (!run.threadId) throw new Error("codex gave no thread id");
     if (run.reply === undefined) throw new Error("codex gave no reply");
     this.#threads.set(key, { threadId: run.threadId, rulesHash: hash });
-    return this.#opts.prompt.isPass(run.reply) ? { kind: "pass" } : { kind: "post", text: run.reply };
+    const found = images ? newImages(home, run.threadId, seen) : [];
+    const files = found.length > 0 ? { files: found } : {};
+    return this.#opts.prompt.isPass(run.reply) ? { kind: "pass", ...files } : { kind: "post", text: run.reply, ...files };
   }
 
   #run(child: ChildProcess, stdin: string, input: ChatTurnInput, signal: AbortSignal): Promise<CodexRun> {
@@ -194,7 +208,18 @@ export class CodexAdapter implements Adapter {
       const { lineSplitter } = this.#opts.activity;
       child.stdout?.setEncoding("utf8");
       child.stderr?.setEncoding("utf8");
-      child.stdout?.on("data", lineSplitter((line) => show(readLine(run, line))));
+      child.stdout?.on(
+        "data",
+        lineSplitter((line) => {
+          show(readLine(run, line));
+          if (!input.onSubagent) return;
+          try {
+            for (const sub of collabEvents(line)) input.onSubagent(sub);
+          } catch (err) {
+            console.error("onSubagent failed:", err);
+          }
+        }),
+      );
       child.stderr?.on(
         "data",
         lineSplitter((line) => {
@@ -240,7 +265,8 @@ export function codexKind(catalog: Awaited<ReturnType<typeof readCodexCatalog>> 
     },
     models: () => catalog.models.map((m) => m.id),
     validate: (options) => {
-      const { sandbox } = options;
+      const { sandbox, images } = options;
+      if (images !== undefined && typeof images !== "boolean") return "options.images must be true or false";
       if (sandbox === undefined || (typeof sandbox === "string" && SANDBOX_MODES.includes(sandbox))) return undefined;
       return `options.sandbox must be one of ${SANDBOX_MODES.join(", ")}`;
     },
@@ -258,6 +284,7 @@ export function codexKind(catalog: Awaited<ReturnType<typeof readCodexCatalog>> 
         ...(entry.model ? { model: entry.model } : {}),
         ...(entry.effort ? { effort: entry.effort } : {}),
         ...(typeof entry.options.sandbox === "string" ? { sandbox: entry.options.sandbox } : {}),
+        ...(typeof entry.options.images === "boolean" ? { images: entry.options.images } : {}),
       }),
   };
 }

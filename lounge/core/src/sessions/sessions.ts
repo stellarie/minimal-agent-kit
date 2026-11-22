@@ -1,7 +1,16 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { DatabaseSync } from "node:sqlite";
 import { permissionsFor, type Caller, type Agent, type LoungeConfig } from "../config.ts";
-import type { Adapter, AdapterLookup, NearThread, TurnMember, TurnSelf } from "../adapters/types.ts";
+import type {
+  Adapter,
+  AdapterLookup,
+  NativeSubagentEvent,
+  NearThread,
+  TurnFile,
+  TurnMember,
+  TurnSelf,
+} from "../adapters/types.ts";
 import { localIso } from "../adapters/prompt.ts";
 import type { RestrictedTokens } from "../auth/restricted.ts";
 import { isThread, LoungeError, postLimit, SESSION_ROOM_PREFIX, type Message, type Room } from "../lounge/room.ts";
@@ -9,7 +18,7 @@ import type { Roster } from "../roster/roster.ts";
 import type { AgentEntry } from "../roster/types.ts";
 import { realTimers, Slots, type TimerApi } from "./slots.ts";
 import { Grants } from "../auth/grants.ts";
-import { attachmentDir, attachmentPath } from "../lounge/attachments.ts";
+import { attachmentDir, attachmentPath, MAX_PER_MESSAGE, type Attachment, type Attachments } from "../lounge/attachments.ts";
 import { driveRoots } from "../guard/drives.ts";
 import type { GuardMode } from "../guard/guardMode.ts";
 import { sweepTurnFolders } from "./turn-folders.ts";
@@ -66,6 +75,8 @@ export interface SessionsOptions {
   // Runtime label and effective model.
   // Unset: the runtime id and the entry model.
   runtimeInfo?(entry: AgentEntry): { label: string; model: string };
+  // Saves the files that a turn made, such as images. Unset: they are dropped.
+  attachments?: Pick<Attachments, "save" | "markPosted">;
   // The owner's rules for every agent. Unset: none.
   loungeRules?(): string;
   // The lounge guard mode. Unset: turns carry none.
@@ -108,13 +119,14 @@ export interface WorkTurnInput {
   // The owner's message started this turn.
   lead?: boolean;
   onActivity(line: string): void;
+  onSubagent?(event: NativeSubagentEvent): void;
 }
 
 interface TurnMode {
   // The owner's message started this turn.
   lead?: boolean;
   // Work turns skip the chat slots and the hard timeout.
-  work?: { cwd: string; onActivity(line: string): void };
+  work?: { cwd: string; onActivity(line: string): void; onSubagent?(event: NativeSubagentEvent): void };
 }
 
 function toView(row: SessionRow): SessionView {
@@ -165,6 +177,7 @@ export class Sessions {
   #restricted: RestrictedTokens;
   #grants: Grants;
   #runtimeInfo: NonNullable<SessionsOptions["runtimeInfo"]>;
+  #attachments: SessionsOptions["attachments"];
   #loungeRules: () => string;
   #guardMode: (() => GuardMode) | undefined;
   #nearThreads: (roomId: string) => NearThread[];
@@ -187,6 +200,7 @@ export class Sessions {
     this.#restricted = opts.restricted;
     this.#grants = opts.grants ?? new Grants(opts.db);
     this.#runtimeInfo = opts.runtimeInfo ?? ((entry) => ({ label: entry.runtime, model: entry.model || "default model" }));
+    this.#attachments = opts.attachments;
     this.#loungeRules = opts.loungeRules ?? (() => "");
     this.#guardMode = opts.guardMode;
     this.#nearThreads = opts.nearThreads ?? (() => []);
@@ -355,9 +369,9 @@ export class Sessions {
 
   // A thread turn: no slot, no hard timeout.
   workTurn(input: WorkTurnInput, signal?: AbortSignal): Promise<TurnOutcome> {
-    const { agent, roomId, brief, cwd, onActivity, lead } = input;
+    const { agent, roomId, brief, cwd, onActivity, onSubagent, lead } = input;
     return this.#tracked(`work-${randomUUID()}`, agent, signal, (key, s) =>
-      this.#turn(agent, roomId, brief, key, s, { work: { cwd, onActivity }, lead: lead === true }),
+      this.#turn(agent, roomId, brief, key, s, { work: { cwd, onActivity, onSubagent }, lead: lead === true }),
     );
   }
 
@@ -507,7 +521,9 @@ export class Sessions {
         ...this.#readDirs(agent),
         ...this.#facts(agent),
         ...this.#threadsFor(roomId),
-        ...(mode.work ? { work: { cwd: mode.work.cwd }, onActivity: mode.work.onActivity } : {}),
+        ...(mode.work
+          ? { work: { cwd: mode.work.cwd }, onActivity: mode.work.onActivity, onSubagent: mode.work.onSubagent }
+          : {}),
         onSlow: () => {
           if (slow) return;
           slow = true;
@@ -515,25 +531,27 @@ export class Sessions {
         },
       };
       const maxPost = postLimit(agent, roomId);
+      // The files of every run of this turn: a redo must not lose those of the run before.
+      const files: TurnFile[] = [];
       // A long reply goes back to the agent, never cut.
       for (let redo = 0; ; redo++) {
         const result = await adapter.chatTurn(input, signal);
         if (signal.aborted) throw new Error("aborted");
         ended = result.kind;
-        if (result.kind !== "post") return {};
+        files.push(...(result.files ?? []));
+        if (result.kind !== "post") return this.#postFiles(agent, roomId, "", files);
         if (postedHere) {
           ended = "pass";
-          return {};
+          return this.#postFiles(agent, roomId, "", files);
         }
         if (result.text.length <= maxPost) {
-          if (result.text.trim().length === 0) return {};
-          return { message: this.#room.post(agent, roomId, result.text) };
+          return this.#postFiles(agent, roomId, result.text.trim().length === 0 ? "" : result.text, files);
         }
         if (redo >= MAX_REDO) {
           // A thread reply goes on to the spawner of the thread: a cut one beats none.
-          if (isThread(roomId)) return { message: this.#room.post(agent, roomId, cutReply(result.text, maxPost)) };
+          if (isThread(roomId)) return this.#postFiles(agent, roomId, cutReply(result.text, maxPost), files);
           this.#room.post(agent, roomId, `reply not posted: ${result.text.length} characters, the limit here is ${maxPost}`, "event");
-          return {};
+          return this.#postFiles(agent, roomId, "", files);
         }
         input.brief = `${brief}\n${redoNote(result.text, maxPost)}`;
       }
@@ -552,6 +570,34 @@ export class Sessions {
         }
       }
     }
+  }
+
+  // Posts the text of a turn with the files that the runtime made.
+  // A file that cannot be saved is skipped: it never fails the turn. No text and no file posts nothing.
+  #postFiles(agent: Agent, roomId: string, text: string, files: TurnFile[]): TurnOutcome {
+    const saved = this.#saveFiles(agent, files);
+    if (text === "" && saved.length === 0) return {};
+    const message = this.#room.post(agent, roomId, text, "text", saved);
+    this.#attachments?.markPosted(saved);
+    return { message };
+  }
+
+  #saveFiles(agent: Agent, files: TurnFile[]): Attachment[] {
+    if (files.length === 0) return [];
+    if (this.#attachments === undefined) {
+      console.error(`turn files of ${agent} dropped: no attachment store`);
+      return [];
+    }
+    const saved: Attachment[] = [];
+    for (const file of new Map(files.map((f) => [f.path, f])).values()) {
+      if (saved.length >= MAX_PER_MESSAGE) break;
+      try {
+        saved.push(this.#attachments.save(agent, file.name, readFileSync(file.path), file.mime));
+      } catch (err) {
+        console.error(`turn file ${file.name} of ${agent} not saved:`, errorText(err));
+      }
+    }
+    return saved;
   }
 
   // Built on every turn, so a roster edit shows.

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { ApiError, ROOM_ID, SESSION_ROOM_PREFIX, createHttpClient } from "./lib/api.ts";
   import type {
     Approval,
@@ -20,8 +20,11 @@
     ThreadInfo,
     Attachment,
     RoomFile,
+    Subagent,
     WorkState,
   } from "./lib/api.ts";
+  import { dropRooms, upsertSubagent } from "./lib/subagents.ts";
+  import SubagentsPanel from "./components/SubagentsPanel.svelte";
   import ThreadForm from "./components/ThreadForm.svelte";
   import EventsPanel from "./components/EventsPanel.svelte";
   import SideTabs from "./components/SideTabs.svelte";
@@ -84,6 +87,10 @@
   let events = $state<LoungeEvent[]>([]);
   let threads = $state<ThreadInfo[]>([]);
   let work = $state<WorkState[]>([]);
+  // Both kinds of subagent, live from the socket. The core keeps them in memory.
+  let subagents = $state<Subagent[]>([]);
+  // The $ list of the composer: the skills that the agents see.
+  let skillItems = $state<Item[]>([]);
   let approvals = $state<Approval[]>([]);
   // Counts guard log entries, so the log reloads on each one.
   let guardChanges = $state(0);
@@ -329,11 +336,27 @@
     }
   }
 
-  // A roster change moves the list and presence.
+  // A roster change moves the list and presence. A plugin change can add skills.
   function rosterChanged() {
     void loadRoster();
     void refreshPresence();
+    void loadSkills();
   }
+
+  async function loadSkills() {
+    if (!client) return;
+    try {
+      const list = await client.skills();
+      skillItems = list.skills.map((s) => ({ value: `$${s.name}`, label: s.name, detail: s.description }));
+    } catch {
+      // The $ list is a help only: a failed load leaves the last list.
+    }
+  }
+
+  // The skills page can add or remove skills: read the list again on the way back.
+  $effect(() => {
+    if (view === "lounge" && client) untrack(() => void loadSkills());
+  });
 
   async function refreshPresence() {
     if (!client) return;
@@ -583,6 +606,7 @@
     }
     channels = channels.filter((c) => !gone.has(c.id));
     threads = threads.filter((t) => !gone.has(t.id));
+    subagents = dropRooms(subagents, ids);
   }
 
   async function saveTopic(topic: string) {
@@ -609,6 +633,7 @@
       update: () => void loadUpdate(),
       scheduled: upsertEvent,
       work: upsertWork,
+      subagent: (s) => (subagents = upsertSubagent(subagents, s)),
       approval: setApprovals,
       guard: () => {
         guardChanges += 1;
@@ -620,9 +645,12 @@
         if (state !== "live") typing = [];
         // Offline, a card cannot be answered.
         if (state === "offline") approvals = [];
+        // The core sends its whole list on connect; a restarted core forgets the old one.
+        if (state === "offline") subagents = [];
         if (state === "live") {
           void loadChannels().then(() => catchUp());
           void loadRoster();
+          void loadSkills();
           void loadEvents();
           void loadThreads();
           void loadUpdate();
@@ -906,6 +934,7 @@
         channel={channel.name}
         mentions={mentionItems}
         channels={channelItems}
+        skills={skillItems}
         onSend={send}
         onUpload={(f) => client!.upload(f)}
       />
@@ -948,6 +977,7 @@
           <EventsPanel {events} {channels} {current} onCreate={createEvent} onCancel={cancelEvent} />
         {:else if sideTab === "board"}
           <AgentGraph {client} threadId={thread?.id} {work} />
+          <SubagentsPanel {subagents} onOpen={openWork} />
           <BlackboardPanel {client} threadId={thread?.id} />
         {:else}
           <FilesPanel

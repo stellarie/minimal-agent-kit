@@ -71,11 +71,15 @@ The owner sets one guard mode for the whole lounge in the app header. An agent c
 
 ## Seeded skills
 
-On the first start, the core copies `lounge/skills/{lounge-workflow,wiki,ste}` to `<home>\skills`. The core never overwrites a folder that exists. The context lists the name and description of each skill. The `lounge_skill` tool returns a body. A post with `$name` attaches that body.
+On the first start, the core copies `lounge/skills/{wiki,ste}` to `<home>\skills`. The core never overwrites a folder that exists. The context lists the name and description of each skill. The `lounge_skill` tool returns a body. A post with `$name` attaches that body. The skills section tells the agent that `$name` names that skill.
+
+In the composer, `$` opens a list of the skills from `GET /api/skills`, with the description of each. This is the same set that the agents see, plugin skills too.
+
+- Type to filter. Arrow keys move. Enter or Tab inserts `$name `. Esc closes the list.
+- The UI reads the list again on reconnect, on a roster or plugin change, and when you go back to the lounge view.
 
 | Skill | Use |
 |---|---|
-| `lounge-workflow` | Design, implement, review, and close. It maps gates to `lounge_gate`, workers to `lounge_spawn`, and tasks to the blackboard. |
 | `wiki` | Reads and writes the project wiki. |
 | `ste` | Writes Simplified Technical English. |
 
@@ -88,6 +92,17 @@ Each runtime plugin reads its model list when it loads, and again on **Refresh**
 - The efforts of an agent are the efforts of its model. An empty or typed model gets all efforts of the catalog.
 - Codex gets `-m <model>` and `-c model_reasoning_effort=<effort>` on every turn, a resumed turn too. Without `-m`, a resumed thread runs on the Codex default model. A resumed thread gets the full context again when the lounge rules changed.
 - A plugin setup function gets `api.home`, the lounge home folder.
+
+## Generated images
+
+A Codex agent can make images with the built-in image tool of codex.
+
+- `codex exec --json` emits no event for it (codex 0.167, new and resumed turns). The tool saves each image as `<CODEX_HOME>/generated_images/<thread id>/exec-<uuid>.png`.
+- The Codex plugin lists that folder before a resumed turn, and again after the run. Each new image file (png, jpg, webp, gif; the newest 10) goes back in `files` of the turn result. A pass keeps its files.
+- The core saves each file as an attachment of the agent. It posts the files with the reply as one message, and the UI shows them inline. With no reply text, or after the agent posted with `lounge_post`, the images post alone. A redo of an over-limit reply keeps the images of the first run. The core logs a file that it cannot save and skips it. That never fails the turn.
+- The file stays in the Codex home. The agent must not copy it or send it with `lounge_attach`: the lounge posts it.
+- The lounge posts the images when the turn ends, not while the tool runs. A turn that fails posts none.
+- The UI needed no change: `Embeds` already shows `image/*` attachments as an `<img>` with a link to the file.
 
 ## Plugin skills
 
@@ -110,7 +125,7 @@ An enabled plugin can supply skills. `plugin.json` has `skills` (skill name to f
 
 ## Blackboard
 
-The **Board** side tab shows `<thread folder>/.kit/tasks/*.md`. It reads and never writes. It polls every 5 seconds. A task file that does not parse shows as raw text with a warning. A missing folder shows an empty board.
+The blackboard is the **Board** side tab. It shows `<thread folder>/.kit/tasks/*.md`. It reads and never writes. It polls every 5 seconds. A task file that does not parse shows as raw text with a warning. A missing folder shows an empty board.
 
 ## Child threads
 
@@ -132,6 +147,20 @@ flowchart TD
 - The agent graph tab shows the thread tree with live status.
 - Native subagents are off, so each child shows in the graph. Claude runs with `--disallowedTools=Task,Agent,Workflow`. A Codex hook denies every `collaboration*` tool, and denies the call when its input does not parse.
 
+### Subagents panel
+
+The **Board** side tab has a **Subagents** section under the agent graph. It groups the subagents by the agent that started them. Each row has a short title, a kind, and a state: `running`, `done`, or `failed`.
+
+| Kind | Starts | Ends |
+|---|---|---|
+| `thread` | A `lounge_spawn` call. The title is the first line of the brief. A click opens the child thread. | The report to the spawner gives `done`, or `failed` when the last turn failed. A stop gives `failed`. |
+| `runtime` | A Claude `Task` or `Agent` `tool_use` in the stream-json. A Codex `collab_tool_call` item with `tool` `spawn_agent` in `codex exec --json`. | The Claude `tool_result` with the same id (`is_error` gives `failed`). The Codex `agents_states` of a later collab item. The end of the turn ends each row that still runs: `done`, or `failed` after an error or a stop. |
+
+- The core keeps the list in memory (`core/src/threads/subagents.ts`), up to 200 rows. A restart clears it. A deleted room takes its rows.
+- Each change goes over the `/ws` socket as `{type: "subagent", subagent}`. A new socket gets the whole list. The panel does not poll.
+- Runtime rows show only when a runtime subagent runs. The isolation above stops them, so a denied call can show as `failed`.
+- The Codex event shape is not verified against a recorded run.
+
 ## Harness isolation
 
 A lounge turn sees only lounge skills and the files that the context builder inserts.
@@ -143,6 +172,7 @@ A lounge turn sees only lounge skills and the files that the context builder ins
 
 - Every Codex turn, a resumed one too, gets `-c sandbox_mode="workspace-write"` and `-c windows.sandbox="unelevated"`. A shell call can write in the working folder, and the guard hook still judges it. With no Windows sandbox selected, Codex rejects every shell call with `blocked by policy`. Set `options.sandbox` of an agent to `read-only` or `danger-full-access` to change the mode.
 - Every Codex turn, a resumed one too, gets the lounge MCP server as `mcp_servers.lounge`. The bearer token comes from the `LOUNGE_GUARD_TOKEN` variable of the turn, so it never appears in the command line. The lounge sets the tool approval to `approve`, because `codex exec` cannot ask.
+- Every Codex turn, a resumed one too, gets `-c features.image_generation=true`. Set `options.images` of an agent to `false` to send `=false`, which removes the tool (checked on codex 0.167). The option must be a boolean. Without it, the tool is on. The first prompt of a thread then holds a `## Runtime` line that says images post by themselves. A change of the option sends the full context again.
 - The lounge never copies `auth.json` from your Codex folder. A refresh token that rotates in one folder can break the other login.
 - **Sign in to Codex** in the app runs `codex login` once with the lounge `CODEX_HOME`. A turn without a login stops with a clear error.
 - The Claude hook matcher covers `Bash`, `PowerShell`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Read`, `Glob`, and `Grep`. The Codex hook matcher is `^Bash$`.

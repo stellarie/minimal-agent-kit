@@ -147,6 +147,21 @@ export interface WorkState {
   tool?: string;
 }
 
+// A subagent of an agent: a lounge_spawn child thread, or the runtime's own.
+export interface Subagent {
+  key: string;
+  // The thread where the starting agent works.
+  roomId: string;
+  agent: Caller;
+  kind: "child" | "native";
+  id: string;
+  title: string;
+  state: "running" | "done" | "failed";
+  // The child thread, for a child.
+  threadId?: string;
+  since: string;
+}
+
 export interface Typing {
   roomId: string;
   caller: Caller;
@@ -369,6 +384,8 @@ export interface LoungeEvents {
   update(): void;
   // Rooms were deleted: a channel and its threads.
   removed?(ids: string[]): void;
+  // A subagent started or changed state.
+  subagent?(s: Subagent): void;
 }
 
 export interface Presence {
@@ -827,7 +844,9 @@ export function createHttpClient(token: string): LoungeClient {
               channels?: Channel[];
               pending?: Approval[];
               ids?: unknown;
+              subagent?: Subagent;
             } & Partial<Typing>;
+            if (data.type === "subagent" && data.subagent?.key) on.subagent?.(data.subagent);
             if (data.type === "message" && data.message) on.message(data.message);
             if (data.type === "channel" && data.channel) on.channel(data.channel);
             if (data.type === "removed" && Array.isArray(data.ids)) on.removed?.(data.ids.map(String));

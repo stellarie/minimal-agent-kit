@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import type { Agent, Caller } from "../config.ts";
 import { LoungeError, MAX_REPORT_POST, type Message, type Room } from "../lounge/room.ts";
 import type { ThreadInfo, Threads, TurnEnd } from "../lounge/threads.ts";
+import type { Subagents } from "./subagents.ts";
 
 // Below a channel thread: lead -> implementer -> explorer.
 export const MAX_DEPTH = 2;
@@ -28,6 +29,8 @@ export interface ChildrenOptions {
   room: Room;
   threads: Threads;
   onStop?: (id: string) => void;
+  // The side panel list of subagents.
+  subagents?: Pick<Subagents, "child" | "childEnded">;
 }
 
 // Child threads: a subagent is a roster agent that leads its own thread.
@@ -96,11 +99,13 @@ export class Children {
     const agent = typeof draft.agent === "string" ? draft.agent : "";
     const cwd = draft.cwd === undefined || draft.cwd === "" ? parent.cwd : draft.cwd;
     const title = brief.split("\n")[0]!.slice(0, TITLE_MAX);
-    return this.#opts.threads.create(
+    const info = this.#opts.threads.create(
       by,
       { channel: parent.parent, title, brief: `@${agent} ${brief}`, lead: agent, cwd },
       { parentId },
     );
+    this.#opts.subagents?.child(parentId, by, info.id, title);
+    return info;
   }
 
   // Stops t, then each child, then the running turns of t.
@@ -108,6 +113,7 @@ export class Children {
     if (!this.#opts.threads.info(id)) throw new LoungeError("unknown_room", `unknown thread: ${id}`);
     this.#stopped.add(id);
     this.#opts.onStop?.(id);
+    this.#opts.subagents?.childEnded(id, "failed");
     let count = 0;
     for (const child of this.childrenOf(id)) count += this.stopTree(by, child);
     return count + this.#opts.threads.halt(by, id);
@@ -129,6 +135,7 @@ export class Children {
     const spawner = info.createdBy as Agent;
     const reply = agent === info.lead ? end.reply : this.#lastFrom(id, info.lead);
     const failed = agent === info.lead ? end.failed : undefined;
+    this.#opts.subagents?.childEnded(id, failed ? "failed" : "done");
     const body = failed ? `could not finish: ${failed}` : (reply?.text ?? "finished with no reply");
     const text = `@${spawner} child thread "${info.name}" finished: ${body}`.slice(0, MAX_REPORT_POST);
     this.#opts.threads.deliver(info.lead, parentId, text, spawner);

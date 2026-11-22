@@ -19,7 +19,6 @@ test("trigger needs the text start or a space before it", () => {
   assert.equal(trigger("mail me at a@b", 14), null);
   assert.equal(trigger("x#docs", 6), null);
   assert.equal(trigger("(@na", 4), null);
-  assert.equal(trigger("use $docs", 9), null);
 });
 
 test("trigger needs a letter to start a query", () => {
@@ -117,4 +116,29 @@ test("insert replaces the trigger and the query with the value and one space", (
   assert.deepEqual(insert("hi @na", 6, 3, "@nana"), { text: "hi @nana ", caret: 9 });
   assert.deepEqual(insert("@", 1, 0, "@ada"), { text: "@ada ", caret: 5 });
   assert.deepEqual(insert("ask @do and more", 7, 4, "@docs"), { text: "ask @docs  and more", caret: 10 });
+});
+
+const skills: Item[] = [
+  { value: "$wiki", label: "wiki", detail: "Reads and writes the project wiki." },
+  { value: "$ste", label: "ste", detail: "Writes Simplified Technical English." },
+  { value: "$lounge-workflow", label: "lounge-workflow", detail: "Design, implement, review, close." },
+  { value: "$2fa", label: "2fa", detail: "Digit start." },
+];
+
+test("trigger finds a $ skill query", () => {
+  assert.deepEqual(trigger("use $docs", 9), { kind: "$", query: "docs", start: 4 });
+  assert.deepEqual(trigger("$", 1), { kind: "$", query: "", start: 0 });
+  assert.deepEqual(trigger("$2f", 3), { kind: "$", query: "2f", start: 0 });
+  assert.equal(trigger("costs 5$x", 9), null);
+  assert.equal(trigger("$-x", 3), null);
+});
+
+test("filter lists skills by name, not by $", () => {
+  assert.deepEqual(filter(skills, "w").map((i) => i.value), ["$wiki", "$lounge-workflow"]);
+  assert.deepEqual(filter(skills, "$"), []);
+  assert.deepEqual(filter(skills, "2").map((i) => i.value), ["$2fa"]);
+});
+
+test("insert completes a skill name with one space after it", () => {
+  assert.deepEqual(insert("use $wi", 7, 4, "$wiki"), { text: "use $wiki ", caret: 10 });
 });
