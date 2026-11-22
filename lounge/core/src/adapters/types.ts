@@ -1,4 +1,5 @@
 import type { Agent } from "../config.ts";
+import type { GuardMode } from "../guard/guardMode.ts";
 import type { Message } from "../lounge/room.ts";
 
 export type AdapterName = string;
@@ -61,6 +62,8 @@ export interface ChatTurnInput {
   projectContext?: string;
   // The owner's rules.
   loungeRules?: string;
+  // The lounge guard mode when the turn starts. Unset: the turn text has no guard line.
+  guardMode?: GuardMode;
   // The lounge skills, listed by name and description.
   skillIndex?: { name: string; description: string }[];
   // The skills that the owner's last post named with $name, with their bodies.

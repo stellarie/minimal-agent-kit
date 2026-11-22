@@ -11,6 +11,7 @@ import { realTimers, Slots, type TimerApi } from "./slots.ts";
 import { Grants } from "../auth/grants.ts";
 import { attachmentDir, attachmentPath } from "../lounge/attachments.ts";
 import { driveRoots } from "../guard/drives.ts";
+import type { GuardMode } from "../guard/guardMode.ts";
 import { sweepTurnFolders } from "./turn-folders.ts";
 
 export interface TurnEnd {
@@ -67,6 +68,8 @@ export interface SessionsOptions {
   runtimeInfo?(entry: AgentEntry): { label: string; model: string };
   // The owner's rules for every agent. Unset: none.
   loungeRules?(): string;
+  // The lounge guard mode. Unset: turns carry none.
+  guardMode?(): GuardMode;
   // Threads near a room. Unset: none.
   nearThreads?(roomId: string): NearThread[];
   now?: () => Date;
@@ -157,6 +160,7 @@ export class Sessions {
   #grants: Grants;
   #runtimeInfo: NonNullable<SessionsOptions["runtimeInfo"]>;
   #loungeRules: () => string;
+  #guardMode: (() => GuardMode) | undefined;
   #nearThreads: (roomId: string) => NearThread[];
   #now: () => Date;
   #timers: TimerApi;
@@ -178,6 +182,7 @@ export class Sessions {
     this.#grants = opts.grants ?? new Grants(opts.db);
     this.#runtimeInfo = opts.runtimeInfo ?? ((entry) => ({ label: entry.runtime, model: entry.model || "default model" }));
     this.#loungeRules = opts.loungeRules ?? (() => "");
+    this.#guardMode = opts.guardMode;
     this.#nearThreads = opts.nearThreads ?? (() => []);
     this.#now = opts.now ?? (() => new Date());
     this.#timers = opts.timers ?? realTimers;
@@ -546,6 +551,7 @@ export class Sessions {
     self?: TurnSelf;
     members: TurnMember[];
     loungeRules: string;
+    guardMode?: GuardMode;
   } {
     const names = this.#room.nicknames();
     const nameOf = (id: string): string => names[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
@@ -555,10 +561,22 @@ export class Sessions {
       .filter((e) => e.enabled && e.id !== agent)
       .map((e) => ({ id: e.id, name: nameOf(e.id), runtime: this.#runtimeInfo(e).label }));
     const loungeRules = this.#loungeRules();
-    if (entry === undefined) return { members, loungeRules };
+    const guardMode = this.#guardModeNow();
+    if (entry === undefined) return { members, loungeRules, ...guardMode };
     const info = this.#runtimeInfo(entry);
     const self = { id: agent, name: nameOf(agent), runtime: info.label, model: info.model, effort: entry.effort };
-    return { self, members, loungeRules };
+    return { self, members, loungeRules, ...guardMode };
+  }
+
+  // A broken lookup leaves the line out.
+  #guardModeNow(): { guardMode?: GuardMode } {
+    if (this.#guardMode === undefined) return {};
+    try {
+      return { guardMode: this.#guardMode() };
+    } catch (err) {
+      console.error("guard mode lookup failed:", errorText(err));
+      return {};
+    }
   }
 
   #threadsFor(roomId: string): { threads?: NearThread[] } {

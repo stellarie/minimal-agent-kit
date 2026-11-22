@@ -1,3 +1,4 @@
+import type { GuardMode } from "../guard/guardMode.ts";
 import { MAX_CHANNEL_POST, MAX_THREAD_POST, type Message } from "../lounge/room.ts";
 import type { ChatTurnInput, TurnMember, TurnSelf } from "./types.ts";
 
@@ -107,6 +108,12 @@ export function answeredBy(self: string, context: readonly Message[]): Map<numbe
   return marks;
 }
 
+const GUARD_MODE_TEXT: Record<GuardMode, string> = {
+  normal: "the owner approves each risky call",
+  auto: "a judge checks each risky call and asks the owner when it is unsure",
+  bypass: "risky calls run with no owner check; hard blocks still stop",
+};
+
 // Head lines, brief, then one JSON line each.
 // The time goes last: it changes every turn.
 export function turnText(input: ChatTurnInput): string {
@@ -130,6 +137,7 @@ export function turnText(input: ChatTurnInput): string {
   if (input.names && Object.keys(input.names).length > 0) {
     head.push(`Display names: ${JSON.stringify(input.names)}`);
   }
+  if (input.guardMode) head.push(`Guard mode: ${input.guardMode} (${GUARD_MODE_TEXT[input.guardMode]})`);
   const answered = answeredBy(input.agent, input.context);
   const lines = input.context.map((m) => {
     if (m.kind === "event") return JSON.stringify({ author: m.author, event: m.text });
