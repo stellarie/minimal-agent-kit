@@ -3,7 +3,7 @@ import { judge, stronger, toAction, type GuardAction, type Verdict } from "../..
 import type { Approvals } from "./approvals.ts";
 import type { Audit, AuditEntry } from "./audit.ts";
 import { isGuardMode, type GuardMode } from "./guardMode.ts";
-import { judgeRequest } from "./judge.ts";
+import { judgeRequest, parseJudge } from "./judge.ts";
 import { CLASSIFY_MS, MAX_CONTENT, classifyRequest, isMutating, parseClassifier, type ClassifyRequest, type ToolMode } from "./modes.ts";
 
 export type { GuardAction, Verdict, ToolMode };
@@ -29,6 +29,7 @@ interface Via {
   tail: string;
   safe: string;
   build(nonce: string): ClassifyRequest;
+  parse(text: string): ReturnType<typeof parseClassifier>;
   run(request: ClassifyRequest, signal: AbortSignal): Promise<string> | undefined;
 }
 
@@ -300,6 +301,7 @@ export class Guard {
       tail: "",
       safe: "the check found it safe",
       build: (nonce) => classifyRequest(agent, action, (text) => this.#redact(text), nonce),
+      parse: parseClassifier,
       run: (request, signal) => this.#classify(agent, request, signal),
     };
   }
@@ -313,6 +315,7 @@ export class Guard {
       tail: ` (rules: ${this.#redact(ruleReason)})`,
       safe: "the judge found it safe",
       build: (nonce) => judgeRequest(agent, action, (text) => this.#redact(text), nonce, ruleReason, this.#policyOf()),
+      parse: parseJudge,
       run: (request, signal) => this.#judge(agent, request, signal),
     };
   }
@@ -362,7 +365,7 @@ export class Guard {
     if (text === undefined) {
       return this.#ask(agent, action, verdict, source, `${prefix}: the check failed: ${failure || "no answer"}${tail}`, signal, spent());
     }
-    const parsed = parseClassifier(text);
+    const parsed = via.parse(text);
     if (parsed.safe) {
       this.#log(agent, action, verdict, source, `${prefix}: ${via.safe}${tail}`, "auto-allowed");
       return { decision: "allow", asked: false };

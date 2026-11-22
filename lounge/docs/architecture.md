@@ -67,7 +67,7 @@ The owner sets one guard mode for the whole lounge in the app header. An agent c
 - The default policy rates these as SAFE: read-only commands, builds, tests, linters, formatters, local git changes, and project installs from a lockfile. It rates these as UNSAFE: deletes outside scratch and build folders, pushes, publishing, network writes, secret reads, and system settings.
 - The owner can edit the policy. A saved empty policy leaves every call to the rules. The judge has no answer cache.
 - Residual: the judge is a small model with a strict prompt. Until the policy names the usual work of the owner, `auto` can open almost as many cards as `normal`.
-- Residual: text in the call can still try to push the judge to `SAFE`. A random marker fences the call text, and the judge has no tools.
+- Residual: text in the call can still try to push the judge to `SAFE`. A random marker fences the call text and the rule reason. Both sit in the user message, because the reason can quote the call. The system prompt holds no agent text. The judge has no tools.
 
 ## Seeded skills
 

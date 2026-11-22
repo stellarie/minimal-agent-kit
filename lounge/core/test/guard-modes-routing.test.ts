@@ -112,7 +112,8 @@ test("c3_1: auto allows a rule ask with no card when the judge says SAFE", async
   assert.deepEqual(entries.map((e) => [e.verdict, e.outcome, e.source]), [["ask", "auto-allowed", "judge"]]);
   assert.equal(r.classified.length, 0, "a judge SAFE skips the tool mode classifier");
   assert.equal(r.judged.length, 1);
-  assert.match(r.judged[0]!.system, /Rule reason: .*recursive delete/);
+  assert.match(r.judged[0]!.user, /Rule reason: .*recursive delete/);
+  assert.doesNotMatch(r.judged[0]!.system, /Rule reason/);
   assert.ok(r.judged[0]!.system.includes("Owner policy:\nSAFE: ls"));
 });
 
@@ -134,7 +135,8 @@ test("c3_1: auto judges a plugin ask and a non-mutating ask in the same way", as
   const { result, entries } = await run(r, READ_ALLOW);
   assert.deepEqual([result.decision, result.asked], ["allow", false]);
   assert.deepEqual(entries.map((e) => [e.verdict, e.outcome, e.source]), [["ask", "auto-allowed", "judge"]]);
-  assert.match(r.judged[0]!.system, /Rule reason: plugin wants a look/);
+  assert.match(r.judged[0]!.user, /Rule reason: plugin wants a look/);
+  assert.ok(!r.judged[0]!.system.includes("plugin wants a look"));
 });
 
 test("c3_1: auto leaves an allowed call to the agent tool mode", async (t) => {
@@ -241,7 +243,7 @@ test("c3_3: a judge timeout opens a card", async (t) => {
 });
 
 test("c3_3: an unclear judge reply opens a card", async (t) => {
-  for (const text of ["", "maybe", "SAFE\nUNSAFE: not sure", "safe but wait"]) {
+  for (const text of ["", "maybe", "SAFE\nUNSAFE: not sure", "safe but wait", "SAFE: ok", "SAFE - ok", "**SAFE**", "safe"]) {
     const r = rig(t, { gm: "auto", judge: () => Promise.resolve(text) });
     const { result } = await run(r, SHELL_ASK);
     assert.equal(result.asked, true, JSON.stringify(text));
