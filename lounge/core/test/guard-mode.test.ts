@@ -45,14 +45,3 @@ test("a set of an unknown mode throws and keeps the mode", () => {
   assert.equal(isGuardMode("bypass"), true);
   assert.equal(isGuardMode("Bypass"), false);
 });
-
-test("a listener gets each new mode", () => {
-  const store = new GuardModeStore(memory());
-  const seen: string[] = [];
-  const off = store.onChange((mode) => seen.push(mode));
-  store.set("auto");
-  store.set("bypass");
-  off();
-  store.set("normal");
-  assert.deepEqual(seen, ["auto", "bypass"]);
-});

@@ -47,6 +47,28 @@ flowchart LR
 - In `auto` mode, a classifier judges a mutating call that the rules allow. A listed model must answer `SAFE`. Any other answer, a timeout, or a failure opens a card.
 - A block verdict never becomes an allow.
 
+### Guard modes
+
+The owner sets one guard mode for the whole lounge in the app header. An agent cannot read or set it (`GET` and `PUT /api/guard/mode`, owner token only). Each agent turn names the mode in its turn text.
+
+| Mode | A rule or plugin ask | A mutating call that the rules allow |
+|---|---|---|
+| `normal` | Opens an approval card, as before. | The agent's tool mode decides. |
+| `auto` | A judge rates it. An exact `SAFE` allows with no card. Any other answer, a cut command, an error, a timeout, or no judge opens a card with the judge reason. | The agent's tool mode decides. |
+| `bypass` | Allowed with no card. | Allowed with no card, whatever the tool mode. |
+
+- Hard blocks stay in every mode. The hook denies a block before the core, and the core reads no guard mode for a block. An askable block still opens its danger card in `bypass` when `guard.blockAsks` is on.
+- A `read-only` agent still gets a deny for a change in every mode.
+- When `guard.ruleAsks` is off, a rule ask passes with no card in every mode, and the judge does not run.
+- The core saves `auto` in the settings table. `bypass` lives in the core process, so a restart gives `normal`.
+- Each silent allow is a row in the guard log (capped at 500): outcome `bypass-allowed` with source `guard-mode`, or outcome `auto-allowed` with source `judge`. Each mode change is a row with source `guard-mode`.
+- The judge is a Claude call with no tools. `GET` and `PUT /api/guard/judge` set its model, its effort, and the owner policy (up to 4 KiB).
+- The policy is in the system text, never inside the call block. Where the policy names a case, the policy decides. For other calls, the rules decide.
+- The default policy rates these as SAFE: read-only commands, builds, tests, linters, formatters, local git changes, and project installs from a lockfile. It rates these as UNSAFE: deletes outside scratch and build folders, pushes, publishing, network writes, secret reads, and system settings.
+- The owner can edit the policy. A saved empty policy leaves every call to the rules. The judge has no answer cache.
+- Residual: the judge is a small model with a strict prompt. Until the policy names the usual work of the owner, `auto` can open almost as many cards as `normal`.
+- Residual: text in the call can still try to push the judge to `SAFE`. A random marker fences the call text, and the judge has no tools.
+
 ## Seeded skills
 
 On the first start, the core copies `lounge/skills/{lounge-workflow,wiki,ste}` to `<home>\skills`. The core never overwrites a folder that exists. The context lists the name and description of each skill. The `lounge_skill` tool returns a body. A post with `$name` attaches that body.

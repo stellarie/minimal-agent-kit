@@ -33,6 +33,8 @@ import { Gates } from "../gates/gates.ts";
 import { Audit } from "../guard/audit.ts";
 import { classify, classifyBudget, readModels } from "../guard/classifier.ts";
 import { Guard } from "../guard/guard.ts";
+import { GuardModeStore, isGuardMode } from "../guard/guardMode.ts";
+import { DEFAULT_JUDGE, readJudge, writeJudge, type JudgeConfig } from "../guard/judge.ts";
 import { rosterMode } from "../guard/modes.ts";
 import { Plugins } from "../plugins/plugins.ts";
 import { RestrictedTokens } from "../auth/restricted.ts";
@@ -274,6 +276,7 @@ export async function startCore(opts: {
   const audit = new Audit(opts.home);
   // Commands the classifier found safe.
   const safeCalls = new Set<string>();
+  const guardMode = new GuardModeStore(db);
   const guard = new Guard({
     home: opts.home,
     approvals,
@@ -287,6 +290,13 @@ export async function startCore(opts: {
     // The model list is read on every call, so a change applies at once.
     classify: (_id, request, signal) => classify(request, signal, { models: () => readModels(db), cache: safeCalls }),
     classifyMs: () => classifyBudget(readModels(db).length),
+    guardMode: () => guardMode.get(),
+    // The judge is read on every call and has no cache, so a policy change applies at once.
+    judge: (_id, request, signal) => {
+      const cfg = readJudge(db);
+      return classify(request, signal, { models: () => [cfg.model], effort: cfg.effort });
+    },
+    judgePolicy: () => readJudge(db).policy,
   });
   const skills = new Skills({ home: opts.home, now: opts.now, extra: () => plugins.skillSources() });
   if (opts.bundledSkills !== undefined) seedSkills(skills, opts.bundledSkills);
@@ -328,6 +338,7 @@ export async function startCore(opts: {
       return { label: kind?.label ?? entry.runtime, model: entry.model || "default model" };
     },
     loungeRules: () => loungeRules,
+    guardMode: () => guardMode.get(),
     // Threads is made below; turns run later.
     nearThreads: (roomId) => threads.near(roomId),
     now: opts.now,
@@ -427,6 +438,23 @@ export async function startCore(opts: {
       available: reason === undefined,
       ...(reason === undefined ? {} : { reason }),
     };
+  };
+
+  // The model and effort choices of a runtime, for an entry that may be a draft.
+  const choicesOf = (kind: RuntimeKind, draft: Record<string, unknown> = {}) => {
+    const entry = {
+      id: "",
+      model: "",
+      effort: "",
+      enabled: true,
+      tape: 1,
+      options: {},
+      position: 0,
+      retired: false,
+      ...draft,
+      runtime: kind.id,
+    } as AgentEntry;
+    return { efforts: kind.efforts(entry), models: kind.models(entry) };
   };
 
   const requireOwner = (req: IncomingMessage): Caller => {
@@ -642,6 +670,45 @@ export async function startCore(opts: {
       sendJson(res, 200, { enabled: readSetting(db, BLOCK_ASKS_KEY) === "true" });
       return;
     }
+    if (url.pathname === "/api/guard/mode") {
+      const author = requireOwner(req);
+      if (method === "PUT") {
+        const body = (await readJson(req)) as { mode?: unknown } | null;
+        const mode = body?.mode;
+        if (!isGuardMode(mode)) throw new HttpError(400, "bad_guard_mode", "mode must be normal, auto, or bypass");
+        guardMode.set(mode);
+        audit.add({
+          at: (opts.now?.() ?? new Date()).toISOString(),
+          agent: author,
+          tool: "guard-mode",
+          summary: `guard mode: ${mode}`,
+          verdict: "allow",
+          outcome: "allowed",
+          reason: `the owner set the guard mode to ${mode}`,
+          source: "guard-mode",
+        });
+      } else if (method !== "GET") {
+        throw new HttpError(405, "method_not_allowed", "use GET or PUT");
+      }
+      sendJson(res, 200, { mode: guardMode.get() });
+      return;
+    }
+    if (url.pathname === "/api/guard/judge") {
+      requireOwner(req);
+      if (method === "PUT") {
+        const body = await readJson(req);
+        try {
+          writeJudge(db, body as JudgeConfig);
+        } catch (err) {
+          throw new HttpError(400, "bad_judge", err instanceof Error ? err.message : String(err));
+        }
+      } else if (method !== "GET") {
+        throw new HttpError(405, "method_not_allowed", "use GET or PUT");
+      }
+      const claude = kinds().find((k) => k.id === DEFAULT_JUDGE.runtime);
+      sendJson(res, 200, { ...readJudge(db), ...(claude ? choicesOf(claude) : { efforts: [], models: [] }) });
+      return;
+    }
     const approvalMatch = APPROVAL_PATH.exec(url.pathname);
     if (approvalMatch) {
       requireOwner(req);
@@ -776,19 +843,7 @@ export async function startCore(opts: {
           throw new HttpError(400, "bad_query", "entry must be a JSON object");
         }
       }
-      const entry = {
-        id: "",
-        model: "",
-        effort: "",
-        enabled: true,
-        tape: 1,
-        options: {},
-        position: 0,
-        retired: false,
-        ...draft,
-        runtime: kind.id,
-      } as AgentEntry;
-      sendJson(res, 200, { efforts: kind.efforts(entry), models: kind.models(entry) });
+      sendJson(res, 200, choicesOf(kind, draft));
       return;
     }
     if (url.pathname === "/api/grants") {

@@ -13,7 +13,6 @@ export function isGuardMode(value: unknown): value is GuardMode {
 export class GuardModeStore {
   #db: DatabaseSync;
   #live: GuardMode;
-  #listeners = new Set<(mode: GuardMode) => void>();
 
   constructor(db: DatabaseSync) {
     this.#db = db;
@@ -28,19 +27,5 @@ export class GuardModeStore {
     if (!isGuardMode(mode)) throw new Error(`unknown guard mode: ${String(mode)}`);
     writeSetting(this.#db, GUARD_MODE_KEY, mode === "auto" ? "auto" : "normal");
     this.#live = mode;
-    for (const listener of [...this.#listeners]) {
-      try {
-        listener(mode);
-      } catch (err) {
-        console.error("guard mode listener failed:", err);
-      }
-    }
-  }
-
-  onChange(listener: (mode: GuardMode) => void): () => void {
-    this.#listeners.add(listener);
-    return () => {
-      this.#listeners.delete(listener);
-    };
   }
 }
