@@ -119,7 +119,7 @@ To install the lounge:
 4. The core keeps its data in `%USERPROFILE%\.agent-lounge`. Set `AGENT_LOUNGE_HOME` to use another folder.
 5. For Codex, tell the human to click **Sign in to Codex** in the app. Never copy `~/.codex/auth.json`.
 
-The lounge runs each runtime in isolation. It loads none of your own skills, plugins, `CLAUDE.md`, or `AGENTS.md`. It copies the skills `lounge-workflow`, `wiki`, and `ste` to `<home>\skills` on the first start. It never overwrites a skill that you edited.
+The lounge runs each runtime in isolation. It loads none of your own skills, plugins, `CLAUDE.md`, or `AGENTS.md`. It copies the skills `wiki` and `ste` to `<home>\skills` on the first start. It never overwrites a skill that you edited.
 
 The bundled plugin `kit-workflow` adds the full kit workflow skill and its verify scripts. It stays off until you turn it on in the plugin list, and it needs Python 3 on the `PATH`.
 

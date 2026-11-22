@@ -106,7 +106,7 @@ lounge 是選用的 Windows 桌面應用程式。它在聊天執行緒中執行 
 
 | 功能 | 作用 |
 |---|---|
-| 預置技能 | 首次啟動把 `lounge-workflow`、`wiki` 和 `ste` 複製到 `<home>\skills`。你編輯過的技能保持原樣。 |
+| 預置技能 | 首次啟動把 `wiki` 和 `ste` 複製到 `<home>\skills`。你編輯過的技能保持原樣。 |
 | 工作流外掛 | 內建外掛 `kit-workflow` 提供完整的 kit 工作流技能和驗證指令碼。在外掛清單中啟用。需要 `PATH` 中有 Python 3。 |
 | 模型與強度 | 代理編輯器依模型列出你本機 Claude Code 和 Codex 回報的模型與強度，其他名稱用 **Custom…** 輸入。**Refresh** 重新讀取。 |
 | 階段關卡 | 工具 `lounge_gate` 在設計和審查結束時開啟「核准」或「修改」卡片。你的決定會喚醒負責的代理。 |

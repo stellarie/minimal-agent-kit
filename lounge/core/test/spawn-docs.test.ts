@@ -11,8 +11,6 @@ test("c10_1: the lounge_spawn description says to end the turn and not to poll",
   assert.match(spawnTool.description, RULE);
 });
 
-test("c10_1: architecture.md and the lounge-workflow skill say the same", () => {
-  for (const file of ["docs/architecture.md", "skills/lounge-workflow/SKILL.md"]) {
-    assert.match(readFileSync(resolve(LOUNGE, file), "utf8"), RULE, file);
-  }
+test("c10_1: architecture.md says to end the turn and not to poll", () => {
+  assert.match(readFileSync(resolve(LOUNGE, "docs/architecture.md"), "utf8"), RULE);
 });

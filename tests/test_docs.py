@@ -12,8 +12,8 @@ _NAMES = ["chl" + "oe", "sher" + "ry", "y" + "uu", "mo" + "mo"]
 PERSONA = re.compile("|".join(_WORDS) + r"|\b(?:" + "|".join(_NAMES) + r")\b", re.IGNORECASE)
 LOUNGE_ZIP = "minimal-agent-kit-lounge-<ver>-windows.zip"
 KIT_ZIP = "minimal-agent-kit-<ver>.zip"
-# One identifier per lounge feature: seeded skills, gates, blackboard, child threads.
-FEATURES = ["lounge-workflow", "lounge_gate", "Board", "lounge_spawn"]
+# One identifier per lounge feature: workflow plugin, gates, blackboard, child threads.
+FEATURES = ["kit-workflow", "lounge_gate", "Board", "lounge_spawn"]
 
 
 def read(rel):

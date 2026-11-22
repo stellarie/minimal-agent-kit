@@ -15,12 +15,12 @@ function writeSkill(root: string, name: string, description: string, body: strin
   writeFileSync(join(root, name, "SKILL.md"), skillText(name, description, body));
 }
 
-const NAMES = ["wiki", "ste", "lounge-workflow"];
+const NAMES = ["wiki", "ste", "my-skill"];
 
 test("c11_1_known_ref", () => {
   assert.deepEqual(skillRefs("please use $wiki here", NAMES), ["wiki"]);
   assert.deepEqual(skillRefs("$ste then $wiki, and $wiki again", NAMES), ["ste", "wiki"]);
-  assert.deepEqual(skillRefs("run $lounge-workflow.", NAMES), ["lounge-workflow"]);
+  assert.deepEqual(skillRefs("run $my-skill.", NAMES), ["my-skill"]);
   assert.deepEqual(skillRefs("$wiki", NAMES), ["wiki"]);
 });
 

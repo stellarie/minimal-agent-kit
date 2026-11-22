@@ -7,7 +7,7 @@ import { seedSkills } from "../src/skills/seed.ts";
 import { Skills } from "../src/skills/skills.ts";
 import { tempHome } from "./helpers.ts";
 
-const SEEDS = ["lounge-workflow", "ste", "wiki"];
+const SEEDS = ["ste", "wiki"];
 
 function bundle(root: string): string {
   const dir = join(root, "bundle");
@@ -33,7 +33,7 @@ test("c12_1: an existing folder is never overwritten, even a broken one", (t) =>
   const store = new Skills({ home: home.dir });
   mkdirSync(join(store.root, "wiki"), { recursive: true });
   writeFileSync(join(store.root, "wiki", "SKILL.md"), "not a skill");
-  assert.deepEqual(seedSkills(store, bundle(home.dir)).sort(), ["lounge-workflow", "ste"]);
+  assert.deepEqual(seedSkills(store, bundle(home.dir)).sort(), ["ste"]);
   assert.equal(readFileSync(join(store.root, "wiki", "SKILL.md"), "utf8"), "not a skill");
 });
 
@@ -45,7 +45,7 @@ test("c12_1: a missing bundle folder seeds nothing", (t) => {
   assert.equal(existsSync(store.root), false);
 });
 
-test("c12_1: the bundled lounge skills are valid, and the workflow names the lounge tools", (t) => {
+test("c12_1: the bundled lounge skills are valid", (t) => {
   const home = tempHome();
   t.after(home.cleanup);
   const store = new Skills({ home: home.dir });
@@ -53,8 +53,6 @@ test("c12_1: the bundled lounge skills are valid, and the workflow names the lou
   const scan = store.scan();
   assert.deepEqual(scan.skipped, []);
   assert.deepEqual(scan.skills.map((s) => s.name), SEEDS);
-  const flow = store.body("lounge-workflow");
-  for (const tool of ["lounge_gate", "lounge_spawn", "lounge_skill"]) assert.match(flow, new RegExp(tool));
 });
 
 test("SC22: an edited <home>/skills/ste stays when the lounge starts again", async (t) => {
