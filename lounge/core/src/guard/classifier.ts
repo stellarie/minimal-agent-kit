@@ -19,6 +19,8 @@ export interface ClassifierOptions {
   models: () => readonly string[];
   // For each model. The guard's own limit still caps the whole list.
   timeoutMs?: number;
+  // Empty or unset: the model's own default.
+  effort?: string;
   claude?: Launcher;
   env?: NodeJS.ProcessEnv;
   // Keeps SAFE answers only. Unset: no cache.
@@ -72,6 +74,7 @@ function runOnce(launcher: Launcher, model: string, request: ClassifyRequest, si
         ...launcher.args,
         "-p",
         "--model", model,
+        ...(opts.effort ? ["--effort", opts.effort] : []),
         "--output-format", "json",
         "--system-prompt", request.system,
         "--setting-sources", "project,local",
