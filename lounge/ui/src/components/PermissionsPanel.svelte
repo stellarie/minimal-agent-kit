@@ -5,6 +5,7 @@
   import { roster, whoColor } from "../lib/roster.svelte.ts";
   import GuardRuleAsks from "./GuardRuleAsks.svelte";
   import GuardBlockAsks from "./GuardBlockAsks.svelte";
+  import GuardJudge from "./GuardJudge.svelte";
   import GuardLog from "./GuardLog.svelte";
 
   let { client, pending, changes }: { client: LoungeClient; pending: number; changes: number } = $props();
@@ -83,6 +84,7 @@
   </div>
   <GuardRuleAsks {client} />
   <GuardBlockAsks {client} />
+  <GuardJudge {client} />
   <GuardLog {client} {pending} {changes} />
 </section>
 

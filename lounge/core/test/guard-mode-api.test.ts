@@ -98,12 +98,15 @@ test("c5_1: the judge route gives the default, lists the claude choices, and che
     model: "haiku",
     effort: "",
     policy: DEFAULT_POLICY,
+    defaultPolicy: DEFAULT_POLICY,
     models: ["haiku", "opus"],
     efforts: ["low", "high"],
   });
   const saved = await h.put("/api/guard/judge", { runtime: "claude-code", model: "opus", effort: "low", policy: "" });
   assert.equal(saved.status, 200);
-  assert.equal(((await saved.json()) as { policy: string }).policy, "");
+  const body = (await saved.json()) as { policy: string; defaultPolicy: string };
+  assert.equal(body.policy, "");
+  assert.equal(body.defaultPolicy, DEFAULT_POLICY);
   const bad = await h.put("/api/guard/judge", { runtime: "claude-code", model: "", effort: "", policy: "" });
   assert.equal(bad.status, 400);
   assert.equal(((await (await h.api("/api/guard/judge")).json()) as { model: string }).model, "opus");

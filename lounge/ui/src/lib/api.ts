@@ -216,13 +216,28 @@ export interface AuditEntry {
   summary: string;
   // The verdict of the rules, before any tool mode.
   verdict: "allow" | "ask" | "block";
-  outcome: "allowed" | "denied" | "blocked" | "timeout" | "auto-allowed";
+  outcome: "allowed" | "denied" | "blocked" | "timeout" | "auto-allowed" | "bypass-allowed";
   reason: string;
   // True for an askable block.
   danger?: boolean;
-  // "rules", "plugin:{id}", "mode", or "classifier".
+  // "rules", "plugin:{id}", "mode", "classifier", "judge", or "guard-mode".
   source: string;
 }
+
+export type GuardMode = "normal" | "auto" | "bypass";
+
+// The judge setting, with the choices of its runtime.
+export interface GuardJudge {
+  runtime: "claude-code";
+  model: string;
+  effort: string;
+  policy: string;
+  models: string[];
+  efforts: string[];
+  defaultPolicy: string;
+}
+
+export type GuardJudgeDraft = Pick<GuardJudge, "runtime" | "model" | "effort" | "policy">;
 
 export interface GuardState {
   pending: Approval[];
@@ -442,6 +457,10 @@ export interface LoungeClient {
   setGuardRuleAsks(enabled: boolean): Promise<{ enabled: boolean }>;
   getBlockAsks(): Promise<{ enabled: boolean }>;
   setBlockAsks(enabled: boolean): Promise<{ enabled: boolean }>;
+  guardMode(): Promise<{ mode: GuardMode }>;
+  setGuardMode(mode: GuardMode): Promise<{ mode: GuardMode }>;
+  guardJudge(): Promise<GuardJudge>;
+  setGuardJudge(draft: GuardJudgeDraft): Promise<GuardJudge>;
   agents(): Promise<RosterList>;
   addAgent(draft: NewAgent): Promise<AgentView>;
   updateAgent(id: string, patch: AgentPatch): Promise<AgentView>;
@@ -695,6 +714,22 @@ export function createHttpClient(token: string): LoungeClient {
 
     setBlockAsks(enabled) {
       return call<{ enabled: boolean }>("/api/guard/block-asks", send("PUT", { enabled }));
+    },
+
+    guardMode() {
+      return call<{ mode: GuardMode }>("/api/guard/mode");
+    },
+
+    setGuardMode(mode) {
+      return call<{ mode: GuardMode }>("/api/guard/mode", send("PUT", { mode }));
+    },
+
+    guardJudge() {
+      return call<GuardJudge>("/api/guard/judge");
+    },
+
+    setGuardJudge(draft) {
+      return call<GuardJudge>("/api/guard/judge", send("PUT", draft));
     },
 
     agents() {

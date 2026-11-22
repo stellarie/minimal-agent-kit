@@ -12,6 +12,7 @@ export function minutesLeft(expiresAt: string, now: number): number {
 
 export function sourceLabel(source: string): string {
   if (source === "mode") return "tool mode";
+  if (source === "guard-mode") return "guard mode";
   return source.startsWith("plugin:") ? `plugin ${source.slice("plugin:".length)}` : source;
 }
 
@@ -21,6 +22,7 @@ export const OUTCOMES: Record<AuditEntry["outcome"], string> = {
   blocked: "Blocked",
   timeout: "Timed out",
   "auto-allowed": "Auto-allowed",
+  "bypass-allowed": "Bypass-allowed",
 };
 
 export function outcomeLabel(outcome: AuditEntry["outcome"]): string {

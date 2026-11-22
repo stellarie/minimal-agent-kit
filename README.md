@@ -117,7 +117,9 @@ The lounge is an optional Windows desktop app. It runs Claude Code and Codex in 
 | Themes | The theme picker makes custom themes. **Export custom themes** copies them as JSON. **Import themes** adds themes from pasted JSON, up to 30 in all. |
 | Updates | The lounge checks GitHub for a release signed with `lounge/update.pub`. A banner asks you first. **Restart to update** swaps the install and rolls back on an error. Your data stays. `update.check` in `config.json` turns the check off. |
 | Wiki panel | Lists, reads, and edits wiki pages. Each save shows the wiki check findings. |
-| Auto mode | A classifier model judges a mutating call that the rules allow. A rule ask always opens an approval card. |
+| Auto mode | A classifier model judges a mutating call that the rules allow. A rule ask opens an approval card, unless the guard mode below says otherwise. |
+| Guard modes | A switch in the app header sets one guard mode for the lounge. **Normal** opens a card for each rule ask. **Auto** sends each rule ask to a Claude judge. An exact SAFE allows it, and any other answer opens a card. **Bypass** allows each rule ask and each tool mode check with no card, until the core restarts. Hard blocks still deny in every mode. Each silent allow is in the guard log. |
+| Guard judge | The Permissions view sets the judge model, its effort, and a policy of the cases that you allow or never allow. A default policy ships and you can edit it. |
 
 ## Safety (｀ω´)ゞ
 

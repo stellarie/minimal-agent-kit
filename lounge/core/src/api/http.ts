@@ -34,7 +34,7 @@ import { Audit } from "../guard/audit.ts";
 import { classify, classifyBudget, readModels } from "../guard/classifier.ts";
 import { Guard } from "../guard/guard.ts";
 import { GuardModeStore, isGuardMode } from "../guard/guardMode.ts";
-import { DEFAULT_JUDGE, readJudge, writeJudge, type JudgeConfig } from "../guard/judge.ts";
+import { DEFAULT_JUDGE, DEFAULT_POLICY, readJudge, writeJudge, type JudgeConfig } from "../guard/judge.ts";
 import { rosterMode } from "../guard/modes.ts";
 import { Plugins } from "../plugins/plugins.ts";
 import { RestrictedTokens } from "../auth/restricted.ts";
@@ -706,7 +706,7 @@ export async function startCore(opts: {
         throw new HttpError(405, "method_not_allowed", "use GET or PUT");
       }
       const claude = kinds().find((k) => k.id === DEFAULT_JUDGE.runtime);
-      sendJson(res, 200, { ...readJudge(db), ...(claude ? choicesOf(claude) : { efforts: [], models: [] }) });
+      sendJson(res, 200, { ...readJudge(db), defaultPolicy: DEFAULT_POLICY, ...(claude ? choicesOf(claude) : { efforts: [], models: [] }) });
       return;
     }
     const approvalMatch = APPROVAL_PATH.exec(url.pathname);

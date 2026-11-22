@@ -6,6 +6,7 @@
     Caller,
     Category,
     Channel,
+    GuardMode,
     Layout,
     LayoutBody,
     EventDraft,
@@ -54,6 +55,8 @@
   import { continues, toolName, typingText } from "./lib/format.ts";
   import { notify, notifyApproval, type Notifier } from "./lib/notify.ts";
   import { newApprovals } from "./lib/guard.ts";
+  import { modeView } from "./lib/guardMode.ts";
+  import GuardModeSwitch from "./components/GuardModeSwitch.svelte";
   import { nameOf, setNickname } from "./lib/names.svelte.ts";
   import { applyBody } from "./lib/layout.ts";
   import { readSideTab, writeSideTab, type SideTab } from "./lib/sidetabs.ts";
@@ -84,6 +87,8 @@
   let approvals = $state<Approval[]>([]);
   // Counts guard log entries, so the log reloads on each one.
   let guardChanges = $state(0);
+  let guardMode = $state<GuardMode>("normal");
+  let guardModeBusy = $state(false);
   let starting = $state(false);
   let problem = $state("");
   let updateState = $state<UpdateState | null>(null);
@@ -341,6 +346,27 @@
     }
   }
 
+  async function loadGuardMode() {
+    if (!client) return;
+    try {
+      guardMode = (await client.guardMode()).mode;
+    } catch (err) {
+      fail(err);
+    }
+  }
+
+  async function chooseGuardMode(next: GuardMode) {
+    if (!client) return;
+    guardModeBusy = true;
+    try {
+      guardMode = (await client.setGuardMode(next)).mode;
+    } catch (err) {
+      fail(err);
+    } finally {
+      guardModeBusy = false;
+    }
+  }
+
   async function loadUpdate() {
     if (!client) return;
     try {
@@ -586,6 +612,7 @@
       approval: setApprovals,
       guard: () => {
         guardChanges += 1;
+        void loadGuardMode();
       },
       state: (state) => {
         link = state;
@@ -599,12 +626,14 @@
           void loadEvents();
           void loadThreads();
           void loadUpdate();
+          void loadGuardMode();
         }
       },
     });
     void loadChannels().then(() => catchUp().then(restoreScroll));
     void loadRoster();
     void loadUpdate();
+    void loadGuardMode();
     void refreshPresence();
     void loadEvents();
     void loadThreads();
@@ -719,6 +748,9 @@
   </nav>
   </div>
   <div class="tools">
+    {#if client}
+      <GuardModeSwitch mode={guardMode} busy={guardModeBusy} onSelect={(m) => void chooseGuardMode(m)} />
+    {/if}
     <span class="link link--{link}" role="status">
       <span class="sr-only">Connection:</span>
       {LINK_TEXT[link]}
@@ -737,6 +769,11 @@
     </button>
   </div>
 </header>
+{#if modeView(guardMode).bar}
+  <div class="bypass-bar" role="alert">
+    Bypass is on: risky calls run with no card. Hard blocks still deny. It ends when the core restarts.
+  </div>
+{/if}
 {#if banner}
   <UpdateBanner {banner} onAction={updateAction} />
 {/if}
@@ -976,6 +1013,13 @@
     flex-wrap: wrap;
   }
   .small { padding: 4px 12px; font-size: .85rem; }
+  .bypass-bar {
+    padding: 6px 16px;
+    background: var(--danger);
+    color: var(--on-danger);
+    font-weight: 700;
+    text-align: center;
+  }
   .link {
     padding: 2px 12px;
     border-radius: var(--r);
