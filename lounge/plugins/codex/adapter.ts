@@ -18,6 +18,13 @@ const CLOSE_WAIT_MS = 5_000;
 const HOOK_TIMEOUT_S = 600;
 // Codex sends every shell call to the hook as Bash.
 const GUARD_MATCHER = "^Bash$";
+// The guard hook is the gate, so a shell call may write in the working folder.
+// Codex on Windows rejects every shell call ("blocked by policy") while no sandbox is selected.
+const DEFAULT_SANDBOX = "workspace-write";
+const SANDBOX_MODES = ["read-only", DEFAULT_SANDBOX, "danger-full-access"];
+const WINDOWS_SANDBOX = "unelevated";
+// The turn environment already holds the token of the turn for the guard hook.
+const TOKEN_ENV = "LOUNGE_GUARD_TOKEN";
 
 export interface CodexAdapterOptions {
   command: string;
@@ -29,9 +36,12 @@ export interface CodexAdapterOptions {
   hookFile: string;
   prompt: Pick<RuntimeContext["prompt"], "chatPrompt" | "turnText" | "isPass">;
   activity: Pick<RuntimeContext["activity"], "lineSplitter">;
+  // Sent on every turn, a resumed one too: a resumed thread otherwise runs on the codex default.
   model?: string;
   // Sent on every turn, a resumed one too.
   effort?: string;
+  // read-only, workspace-write, or danger-full-access. Unset: workspace-write.
+  sandbox?: string;
   // Where to look for codex. Unset: this process.
   env?: NodeJS.ProcessEnv;
 }
@@ -39,6 +49,25 @@ export interface CodexAdapterOptions {
 export function guardHook(hookFile: string): CodexHookEntry {
   const command = `node "${hookFile.replace(/\\/g, "/")}"`;
   return { matcher: GUARD_MATCHER, hooks: [{ type: "command", command, timeout: HOOK_TIMEOUT_S }] };
+}
+
+// Sent on every turn: exec resume has no -s, and a config override works for both.
+export function sandboxArgs(sandbox: string = DEFAULT_SANDBOX): string[] {
+  return ["-c", `sandbox_mode=${JSON.stringify(sandbox)}`, "-c", `windows.sandbox=${JSON.stringify(WINDOWS_SANDBOX)}`];
+}
+
+// The lounge MCP server of this turn. The token comes from the environment, so it stays out of the command line.
+// exec never asks for approval, so a tool call that needs one fails: the lounge tools are approved here,
+// and the lounge core checks every call by the token.
+export function mcpArgs(url: string): string[] {
+  return [
+    "-c",
+    `mcp_servers.lounge.url=${JSON.stringify(url)}`,
+    "-c",
+    `mcp_servers.lounge.bearer_token_env_var=${JSON.stringify(TOKEN_ENV)}`,
+    "-c",
+    `mcp_servers.lounge.default_tools_approval_mode=${JSON.stringify("approve")}`,
+  ];
 }
 
 // codex reads -C as a Windows path.
@@ -94,11 +123,13 @@ export class CodexAdapter implements Adapter {
     const tail = threadId
       ? ["exec", "resume", threadId, "--json", "--skip-git-repo-check"]
       : ["exec", "--json", "--skip-git-repo-check", "-C", windowsPath(workDir)];
-    if (!threadId && this.#opts.model) tail.push("-m", this.#opts.model);
+    if (this.#opts.model) tail.push("-m", this.#opts.model);
     const { text: stdin, hash } = codexStdin(thread, input, this.#opts.prompt);
     const args = [
       ...commandArgs,
       ...isolation.args,
+      ...sandboxArgs(this.#opts.sandbox),
+      ...mcpArgs(this.#opts.mcpUrl()),
       ...(this.#opts.effort ? ["-c", `model_reasoning_effort=${this.#opts.effort}`] : []),
       ...codexSubagentArgs([guardHook(this.#opts.hookFile)]),
       ...tail,
@@ -113,7 +144,7 @@ export class CodexAdapter implements Adapter {
         ...process.env,
         ...isolation.env,
         LOUNGE_GUARD_URL: new URL(this.#opts.mcpUrl()).origin,
-        LOUNGE_GUARD_TOKEN: input.mcpToken,
+        [TOKEN_ENV]: input.mcpToken,
       },
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -208,6 +239,11 @@ export function codexKind(catalog: Awaited<ReturnType<typeof readCodexCatalog>> 
       return [...new Set(catalog.models.flatMap((m) => m.efforts))].sort((a, b) => effortRank(a) - effortRank(b));
     },
     models: () => catalog.models.map((m) => m.id),
+    validate: (options) => {
+      const { sandbox } = options;
+      if (sandbox === undefined || (typeof sandbox === "string" && SANDBOX_MODES.includes(sandbox))) return undefined;
+      return `options.sandbox must be one of ${SANDBOX_MODES.join(", ")}`;
+    },
     create: (entry: AgentEntry, ctx: RuntimeContext) =>
       new CodexAdapter({
         command: entry.options.command ?? "codex",
@@ -221,6 +257,7 @@ export function codexKind(catalog: Awaited<ReturnType<typeof readCodexCatalog>> 
         activity: ctx.activity,
         ...(entry.model ? { model: entry.model } : {}),
         ...(entry.effort ? { effort: entry.effort } : {}),
+        ...(typeof entry.options.sandbox === "string" ? { sandbox: entry.options.sandbox } : {}),
       }),
   };
 }

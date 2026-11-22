@@ -54,6 +54,7 @@ function rig(
     hardMs?: number;
     model?: string;
     effort?: string;
+    sandbox?: string;
   } = {},
 ): Rig {
   const h = tempHome();
@@ -78,6 +79,7 @@ function rig(
     ...(over.env ? { env: over.env } : {}),
     ...(over.model ? { model: over.model } : {}),
     ...(over.effort ? { effort: over.effort } : {}),
+    ...(over.sandbox ? { sandbox: over.sandbox } : {}),
   });
   const runs = () => {
     let text = "";
@@ -249,6 +251,8 @@ test("C7_3: a blocked command shows the stderr reason and the agent text", async
   assert.ok(lines.includes("Command blocked by PreToolUse hook: test-deny blocked. Command: echo test-deny"), lines.join("\n"));
 });
 
+const configValues = (argv: string[], key: string) =>
+  argv.flatMap((a, i) => (argv[i - 1] === "-c" && a.startsWith(`${key}=`) ? [a] : []));
 const effortValues = (argv: string[]) => argv.filter((a) => a.startsWith("model_reasoning_effort="));
 const CATALOG = {
   models: [
@@ -274,9 +278,29 @@ test("c5_1: a resumed thread gets -c model_reasoning_effort", async (t) => {
   await r.adapter.chatTurn(input(), signal);
   const resumed = r.runs()[1]!.argv;
   assert.ok(resumed.includes("resume"));
-  assert.ok(!resumed.includes("-m"));
   assert.deepEqual(effortValues(resumed), ["model_reasoning_effort=high"]);
   assert.equal(resumed[resumed.indexOf("model_reasoning_effort=high") - 1], "-c");
+});
+
+test("c5_1: a resumed thread gets the model of the agent, so a default model never replaces it", async (t) => {
+  const r = rig(t, "ok", { model: "gpt-6.1-terra" });
+  const signal = new AbortController().signal;
+  await r.adapter.chatTurn(input(), signal);
+  await r.adapter.chatTurn(input(), signal);
+  for (const run of r.runs()) {
+    const at = run.argv.indexOf("exec");
+    assert.deepEqual(run.argv.slice(run.argv.indexOf("-m"), run.argv.indexOf("-m") + 2), ["-m", "gpt-6.1-terra"]);
+    assert.ok(run.argv.indexOf("-m") > at, "-m is an option of exec and of exec resume");
+  }
+  assert.ok(r.runs()[1]!.argv.includes("resume"));
+});
+
+test("c5_1: an agent with no model passes no -m, a resumed turn too", async (t) => {
+  const r = rig(t, "ok");
+  const signal = new AbortController().signal;
+  await r.adapter.chatTurn(input(), signal);
+  await r.adapter.chatTurn(input(), signal);
+  for (const run of r.runs()) assert.ok(!run.argv.includes("-m"));
 });
 
 test("c5_1: an empty effort adds no -c model_reasoning_effort", async (t) => {
@@ -381,3 +405,58 @@ test(
     assert.equal(two.kind === "post" && two.text.trim(), "KIWI");
   },
 );
+
+test("c8_1: every run, a resumed one too, writes in the working folder: workspace-write and the Windows sandbox", async (t) => {
+  const r = rig(t, "ok");
+  const signal = new AbortController().signal;
+  await r.adapter.chatTurn(input(), signal);
+  await r.adapter.chatTurn(input(), signal);
+  const [first, resumed] = r.runs();
+  assert.ok(resumed!.argv.includes("resume"));
+  for (const run of [first!, resumed!]) {
+    assert.deepEqual(configValues(run.argv, "sandbox_mode"), ['sandbox_mode="workspace-write"']);
+    // Without a selected Windows sandbox, codex rejects every shell call: "blocked by policy".
+    assert.deepEqual(configValues(run.argv, "windows.sandbox"), ['windows.sandbox="unelevated"']);
+    assert.ok(run.argv.indexOf('sandbox_mode="workspace-write"') < run.argv.indexOf("exec"));
+    assert.equal(hookValues(run.argv).length, 1, "the guard hook still runs");
+    assert.ok(!run.argv.includes("--dangerously-bypass-approvals-and-sandbox"));
+  }
+});
+
+test("c8_1: options.sandbox sets the sandbox mode of every run", async (t) => {
+  const r = rig(t, "ok", { sandbox: "read-only" });
+  const signal = new AbortController().signal;
+  await r.adapter.chatTurn(input(), signal);
+  await r.adapter.chatTurn(input(), signal);
+  for (const run of r.runs()) assert.deepEqual(configValues(run.argv, "sandbox_mode"), ['sandbox_mode="read-only"']);
+});
+
+test("c8_1: the codex kind rejects a sandbox mode that codex does not know", () => {
+  const kind = codexKind();
+  assert.equal(kind.validate?.({}), undefined);
+  assert.equal(kind.validate?.({ sandbox: "workspace-write" }), undefined);
+  assert.equal(kind.validate?.({ sandbox: "danger-full-access" }), undefined);
+  assert.match(kind.validate?.({ sandbox: "everything" }) ?? "", /options.sandbox/);
+});
+
+test("c8_2: every run, a resumed one too, attaches the lounge MCP server with the token in the environment", async (t) => {
+  const r = rig(t, "ok");
+  const signal = new AbortController().signal;
+  await r.adapter.chatTurn(input(), signal);
+  await r.adapter.chatTurn(input(), signal);
+  const [first, resumed] = r.runs();
+  assert.ok(resumed!.argv.includes("resume"));
+  for (const run of [first!, resumed!]) {
+    assert.deepEqual(configValues(run.argv, "mcp_servers.lounge.url"), ['mcp_servers.lounge.url="http://127.0.0.1:4555/mcp"']);
+    assert.deepEqual(configValues(run.argv, "mcp_servers.lounge.bearer_token_env_var"), [
+      'mcp_servers.lounge.bearer_token_env_var="LOUNGE_GUARD_TOKEN"',
+    ]);
+    // Approval policy is never in exec: without this, codex fails each lounge tool call with "requires approval".
+    assert.deepEqual(configValues(run.argv, "mcp_servers.lounge.default_tools_approval_mode"), [
+      'mcp_servers.lounge.default_tools_approval_mode="approve"',
+    ]);
+    assert.ok(run.argv.indexOf('mcp_servers.lounge.url="http://127.0.0.1:4555/mcp"') < run.argv.indexOf("exec"));
+    assert.ok(!run.argv.join(" ").includes("tok-123"), "the token never goes in the command line");
+    assert.equal(run.guard.token, "tok-123", "the variable holds the token of the turn");
+  }
+});
