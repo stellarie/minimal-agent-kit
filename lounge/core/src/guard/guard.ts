@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { judge, stronger, toAction, type GuardAction, type Verdict } from "../../../../core/guard/rules.js";
 import type { Approvals } from "./approvals.ts";
 import type { Audit, AuditEntry } from "./audit.ts";
+import { isGuardMode, type GuardMode } from "./guardMode.ts";
+import { judgeRequest } from "./judge.ts";
 import { CLASSIFY_MS, MAX_CONTENT, classifyRequest, isMutating, parseClassifier, type ClassifyRequest, type ToolMode } from "./modes.ts";
 
 export type { GuardAction, Verdict, ToolMode };
@@ -15,6 +17,19 @@ export interface GuardResult {
   decision: "allow" | "deny";
   reason?: string;
   asked: boolean;
+}
+
+// One automatic check: the agent's classifier, or the judge of a rule ask.
+interface Via {
+  source: "classifier" | "judge";
+  // The rules verdict that the audit row names.
+  verdict: AuditEntry["verdict"];
+  prefix: string;
+  // Added to each reason, so a card still shows the rule reason.
+  tail: string;
+  safe: string;
+  build(nonce: string): ClassifyRequest;
+  run(request: ClassifyRequest, signal: AbortSignal): Promise<string> | undefined;
 }
 
 const PLUGIN_MS = 2_000;
@@ -76,6 +91,9 @@ export class Guard {
   #classifyMs: number | (() => number);
   #ruleAsks: () => boolean;
   #blockAsks: () => boolean;
+  #guardMode: () => GuardMode;
+  #judge: (agent: string, request: ClassifyRequest, signal: AbortSignal) => Promise<string> | undefined;
+  #judgePolicy: () => string;
 
   constructor(opts: {
     home: string;
@@ -95,6 +113,12 @@ export class Guard {
     ruleAsks?: () => boolean;
     // True: an askable block opens a card.
     blockAsks?: () => boolean;
+    // Read on every call. Unset: normal.
+    guardMode?: () => GuardMode;
+    // Rates an ask in auto mode. Unset result: no judge, so a card opens.
+    judge?: (agent: string, request: ClassifyRequest, signal: AbortSignal) => Promise<string> | undefined;
+    // The owner's cases for the judge.
+    judgePolicy?: () => string;
   }) {
     this.#home = opts.home;
     this.#approvals = opts.approvals;
@@ -107,6 +131,9 @@ export class Guard {
     this.#classifyMs = opts.classifyMs ?? CLASSIFY_MS;
     this.#ruleAsks = opts.ruleAsks ?? (() => true);
     this.#blockAsks = opts.blockAsks ?? (() => false);
+    this.#guardMode = opts.guardMode ?? (() => "normal");
+    this.#judge = opts.judge ?? (() => undefined);
+    this.#judgePolicy = opts.judgePolicy ?? (() => "");
   }
 
   action(tool: unknown, input: unknown, cwd: unknown): GuardAction {
@@ -151,19 +178,40 @@ export class Guard {
       this.#log(agent, action, v.verdict, "mode", why, "denied");
       return { decision: "deny", reason: why, asked: false };
     }
+    const guardMode = this.#guardModeOf();
     let skipped: string | undefined;
     if (v.verdict === "ask") {
-      if (v.source !== "rules" || v.pluginAsk || this.#ruleAsksOn()) return this.#ask(agent, action, v.verdict, v.source, reason, signal);
+      if (v.source !== "rules" || v.pluginAsk || this.#ruleAsksOn()) {
+        if (guardMode === "bypass") return this.#bypass(agent, action, v.verdict, `bypass: ${reason}`);
+        if (guardMode === "auto") return this.#auto(agent, action, signal, this.#judgeVia(agent, action, reason));
+        return this.#ask(agent, action, v.verdict, v.source, reason, signal);
+      }
       skipped = `rule asks are off: ${reason}`;
     }
     if (mode === "full" || !isMutating(action, this.#home)) {
       if (skipped) this.#log(agent, action, v.verdict, v.source, skipped, "allowed");
       return { decision: "allow", asked: false };
     }
+    if (guardMode === "bypass") return this.#bypass(agent, action, v.verdict, skipped ?? "bypass: the tool mode check was skipped");
     if (mode === "ask") {
       return this.#ask(agent, action, v.verdict, "mode", "ask mode: the owner approves each change", signal);
     }
-    return this.#auto(agent, action, signal);
+    return this.#auto(agent, action, signal, this.#classifierVia(agent, action));
+  }
+
+  // A broken lookup gives normal.
+  #guardModeOf(): GuardMode {
+    try {
+      const mode = this.#guardMode();
+      return isGuardMode(mode) ? mode : "normal";
+    } catch {
+      return "normal";
+    }
+  }
+
+  #bypass(agent: string, action: GuardAction, verdict: AuditEntry["verdict"], reason: string): GuardResult {
+    this.#log(agent, action, verdict, "guard-mode", reason, "bypass-allowed");
+    return { decision: "allow", asked: false };
   }
 
   // A broken setting keeps the cards.
@@ -243,17 +291,51 @@ export class Guard {
     return `${this.#redact(head)}\n${excerpt}`;
   }
 
-  // The agent's own runtime judges.
+  // The agent's tool mode check: its own runtime judges.
+  #classifierVia(agent: string, action: GuardAction): Via {
+    return {
+      source: "classifier",
+      verdict: "allow",
+      prefix: "auto mode",
+      tail: "",
+      safe: "the check found it safe",
+      build: (nonce) => classifyRequest(agent, action, (text) => this.#redact(text), nonce),
+      run: (request, signal) => this.#classify(agent, request, signal),
+    };
+  }
+
+  // The guard mode check of a rule or plugin ask.
+  #judgeVia(agent: string, action: GuardAction, ruleReason: string): Via {
+    return {
+      source: "judge",
+      verdict: "ask",
+      prefix: "auto guard",
+      tail: ` (rules: ${this.#redact(ruleReason)})`,
+      safe: "the judge found it safe",
+      build: (nonce) => judgeRequest(agent, action, (text) => this.#redact(text), nonce, ruleReason, this.#policyOf()),
+      run: (request, signal) => this.#judge(agent, request, signal),
+    };
+  }
+
+  // A broken lookup gives no policy.
+  #policyOf(): string {
+    try {
+      return this.#judgePolicy();
+    } catch {
+      return "";
+    }
+  }
+
   // Unclear means a card.
-  async #auto(agent: string, action: GuardAction, signal?: AbortSignal): Promise<GuardResult> {
-    const prefix = "auto mode";
+  async #auto(agent: string, action: GuardAction, signal: AbortSignal | undefined, via: Via): Promise<GuardResult> {
+    const { prefix, source, verdict, tail } = via;
     const limit = typeof this.#classifyMs === "function" ? this.#classifyMs() : this.#classifyMs;
     const started = performance.now();
     const spent = () => performance.now() - started;
-    const request = classifyRequest(agent, action, (text) => this.#redact(text), randomBytes(8).toString("hex"));
+    const request = via.build(randomBytes(8).toString("hex"));
     // A long write still goes to the check: its path is whole.
     if (request.commandCut) {
-      return this.#ask(agent, action, "allow", "classifier", `${prefix}: the call is too long for the check`, signal);
+      return this.#ask(agent, action, verdict, source, `${prefix}: the call is too long for the check${tail}`, signal);
     }
     const timeout = new AbortController();
     const timer = setTimeout(() => timeout.abort(new Error("timed out")), limit);
@@ -261,10 +343,10 @@ export class Guard {
     let text: string | undefined;
     let failure = "";
     try {
-      const pending = this.#classify(agent, request, combined);
+      const pending = via.run(request, combined);
       if (pending === undefined) {
         clearTimeout(timer);
-        return this.#ask(agent, action, "allow", "classifier", `${prefix}: no classifier for this runtime`, signal);
+        return this.#ask(agent, action, verdict, source, `${prefix}: no ${source} for this runtime${tail}`, signal);
       }
       text = await settle(pending, combined);
     } catch (err) {
@@ -274,18 +356,18 @@ export class Guard {
     }
     if (signal?.aborted) {
       const why = "the turn ended before the check finished";
-      this.#log(agent, action, "allow", "classifier", `${prefix}: ${why}`, "denied");
+      this.#log(agent, action, verdict, source, `${prefix}: ${why}`, "denied");
       return { decision: "deny", reason: why, asked: false };
     }
     if (text === undefined) {
-      return this.#ask(agent, action, "allow", "classifier", `${prefix}: the check failed: ${failure || "no answer"}`, signal, spent());
+      return this.#ask(agent, action, verdict, source, `${prefix}: the check failed: ${failure || "no answer"}${tail}`, signal, spent());
     }
     const parsed = parseClassifier(text);
     if (parsed.safe) {
-      this.#log(agent, action, "allow", "classifier", `${prefix}: the check found it safe`, "auto-allowed");
+      this.#log(agent, action, verdict, source, `${prefix}: ${via.safe}${tail}`, "auto-allowed");
       return { decision: "allow", asked: false };
     }
-    return this.#ask(agent, action, "allow", "classifier", `${prefix}: ${this.#redact(parsed.reason)}`, signal, spent());
+    return this.#ask(agent, action, verdict, source, `${prefix}: ${this.#redact(parsed.reason)}${tail}`, signal, spent());
   }
 
   recent(): ReturnType<Audit["recent"]> {

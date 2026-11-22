@@ -8,11 +8,11 @@ export interface AuditEntry {
   summary: string;
   // The verdict of the rules, before any tool mode.
   verdict: "allow" | "ask" | "block";
-  outcome: "allowed" | "denied" | "blocked" | "timeout" | "auto-allowed";
+  outcome: "allowed" | "denied" | "blocked" | "timeout" | "auto-allowed" | "bypass-allowed";
   reason: string;
   // True for an askable block.
   danger?: boolean;
-  // "rules", "plugin:{id}", "mode", or "classifier".
+  // "rules", "plugin:{id}", "mode", "classifier", "judge", or "guard-mode".
   source: string;
 }
 
