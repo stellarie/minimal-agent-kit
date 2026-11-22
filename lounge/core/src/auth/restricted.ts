@@ -4,6 +4,8 @@ import type { Agent } from "../config.ts";
 export interface RestrictedGrant {
   caller: Agent;
   sessionId: string;
+  // The room of the turn. An agent may run in several rooms at once.
+  roomId?: string;
 }
 
 type RevokeListener = (token: string) => void;
@@ -13,9 +15,9 @@ export class RestrictedTokens {
   #grants = new Map<string, RestrictedGrant>();
   #listeners = new Set<RevokeListener>();
 
-  mint(agent: Agent, sessionId: string): string {
+  mint(agent: Agent, sessionId: string, roomId?: string): string {
     const token = randomBytes(32).toString("base64url");
-    this.#grants.set(token, { caller: agent, sessionId });
+    this.#grants.set(token, { caller: agent, sessionId, ...(roomId === undefined ? {} : { roomId }) });
     return token;
   }
 

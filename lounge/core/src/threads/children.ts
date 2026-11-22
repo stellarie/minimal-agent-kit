@@ -1,12 +1,11 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { Agent, Caller } from "../config.ts";
-import { LoungeError, type Message, type Room } from "../lounge/room.ts";
+import { LoungeError, MAX_REPORT_POST, type Message, type Room } from "../lounge/room.ts";
 import type { ThreadInfo, Threads, TurnEnd } from "../lounge/threads.ts";
 
 // Below a channel thread: lead -> implementer -> explorer.
 export const MAX_DEPTH = 2;
 const TITLE_MAX = 60;
-const REPORT_MAX = 4000;
 
 export interface SpawnDraft {
   agent: unknown;
@@ -68,9 +67,17 @@ export class Children {
     return false;
   }
 
-  // The caller's one running turn is the parent.
-  parentFor(caller: Caller): string {
+  // The thread of the caller's turn is the parent. A child may have the
+  // spawner's own agent, so one agent can run in several threads at once:
+  // the turn token names the thread. With no token room, one running turn is the parent.
+  parentFor(caller: Caller, turnRoom?: string): string {
     const rooms = [...new Set(this.#opts.threads.work().filter((w) => w.agent === caller).map((w) => w.roomId))];
+    if (turnRoom !== undefined) {
+      if (!rooms.includes(turnRoom)) {
+        throw new LoungeError("bad_thread", "lounge_spawn works only during your turn in a work thread");
+      }
+      return turnRoom;
+    }
     if (rooms.length !== 1) {
       throw new LoungeError("bad_thread", "lounge_spawn works only during your turn in one work thread");
     }
@@ -123,7 +130,7 @@ export class Children {
     const reply = agent === info.lead ? end.reply : this.#lastFrom(id, info.lead);
     const failed = agent === info.lead ? end.failed : undefined;
     const body = failed ? `could not finish: ${failed}` : (reply?.text ?? "finished with no reply");
-    const text = `@${spawner} child thread "${info.name}" finished: ${body}`.slice(0, REPORT_MAX);
+    const text = `@${spawner} child thread "${info.name}" finished: ${body}`.slice(0, MAX_REPORT_POST);
     this.#opts.threads.deliver(info.lead, parentId, text, spawner);
   }
 

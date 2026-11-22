@@ -4,7 +4,7 @@ import { permissionsFor, type Caller, type Agent, type LoungeConfig } from "../c
 import type { Adapter, AdapterLookup, NearThread, TurnMember, TurnSelf } from "../adapters/types.ts";
 import { localIso } from "../adapters/prompt.ts";
 import type { RestrictedTokens } from "../auth/restricted.ts";
-import { LoungeError, postLimit, SESSION_ROOM_PREFIX, type Message, type Room } from "../lounge/room.ts";
+import { isThread, LoungeError, postLimit, SESSION_ROOM_PREFIX, type Message, type Room } from "../lounge/room.ts";
 import type { Roster } from "../roster/roster.ts";
 import type { AgentEntry } from "../roster/types.ts";
 import { realTimers, Slots, type TimerApi } from "./slots.ts";
@@ -133,7 +133,7 @@ function toView(row: SessionRow): SessionView {
   return view;
 }
 
-// Two tries to fit the limit, then nothing posts.
+// Two tries to fit the limit. Then a thread reply posts cut; any other posts nothing.
 const MAX_REDO = 2;
 
 export function redoNote(draft: string, limit: number): string {
@@ -143,6 +143,12 @@ export function redoNote(draft: string, limit: number): string {
     draft,
     "End of draft.",
   ].join("\n");
+}
+
+// The head of the draft that fits, then a marker that says what the cut took.
+function cutReply(draft: string, limit: number): string {
+  const marker = `\n[cut: ${draft.length} characters, the limit here is ${limit}]`;
+  return draft.slice(0, limit - marker.length) + marker;
 }
 
 function errorText(err: unknown): string {
@@ -486,7 +492,7 @@ export class Sessions {
       if (!ready.ok) throw new Error(ready.reason ?? `${adapter.name} is unavailable`);
       const { contextMessages } = this.#config.sessions;
       const context = this.#withPaths(this.#room.read(roomId, { limit: contextMessages, noTools: true }));
-      token = this.#restricted.mint(agent, scope);
+      token = this.#restricted.mint(agent, scope, roomId);
       typing = true;
       this.#room.setTyping(agent, roomId, true);
       const input = {
@@ -524,6 +530,8 @@ export class Sessions {
           return { message: this.#room.post(agent, roomId, result.text) };
         }
         if (redo >= MAX_REDO) {
+          // A thread reply goes on to the spawner of the thread: a cut one beats none.
+          if (isThread(roomId)) return { message: this.#room.post(agent, roomId, cutReply(result.text, maxPost)) };
           this.#room.post(agent, roomId, `reply not posted: ${result.text.length} characters, the limit here is ${maxPost}`, "event");
           return {};
         }

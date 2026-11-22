@@ -19,7 +19,7 @@ export interface GuardResult {
   asked: boolean;
 }
 
-// One automatic check: the agent's classifier, or the judge of a rule ask.
+// One automatic check: the agent's classifier, or the judge of a call that would raise a card.
 interface Via {
   source: "classifier" | "judge";
   // The rules verdict that the audit row names.
@@ -195,7 +195,10 @@ export class Guard {
     }
     if (guardMode === "bypass") return this.#bypass(agent, action, v.verdict, skipped ?? "bypass: the tool mode check was skipped");
     if (mode === "ask") {
-      return this.#ask(agent, action, v.verdict, "mode", "ask mode: the owner approves each change", signal);
+      const why = "ask mode: the owner approves each change";
+      // Auto guard mode rates the call that would raise this card.
+      if (guardMode === "auto") return this.#auto(agent, action, signal, this.#judgeVia(agent, action, why, v.verdict));
+      return this.#ask(agent, action, v.verdict, "mode", why, signal);
     }
     return this.#auto(agent, action, signal, this.#classifierVia(agent, action));
   }
@@ -306,11 +309,11 @@ export class Guard {
     };
   }
 
-  // The guard mode check of a rule or plugin ask.
-  #judgeVia(agent: string, action: GuardAction, ruleReason: string): Via {
+  // The guard mode check of a call that would raise a card.
+  #judgeVia(agent: string, action: GuardAction, ruleReason: string, verdict: AuditEntry["verdict"] = "ask"): Via {
     return {
       source: "judge",
-      verdict: "ask",
+      verdict,
       prefix: "auto guard",
       tail: ` (rules: ${this.#redact(ruleReason)})`,
       safe: "the judge found it safe",

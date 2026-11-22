@@ -201,6 +201,7 @@ test("sessions: a turn reply posts, and message returns it", async (t) => {
   assert.equal(first.input.agent, "ada");
   assert.equal(first.input.context.at(-1)?.text, "hi");
   assert.notEqual(h.restricted.lookup(first.input.mcpToken), null);
+  assert.equal(h.restricted.lookup(first.input.mcpToken)?.roomId, roomId, "the turn token names the turn room");
   first.resolve({ kind: "post", text: "hello" });
   await waitFor(() => h.sessions.status(id).state === "idle", "idle");
   assert.equal(h.restricted.lookup(first.input.mcpToken), null);
@@ -482,4 +483,26 @@ test("sessions: a work turn keeps its final text after a progress post, so a han
   h.adapter.turns[0]!.resolve({ kind: "post", text: "done, @cyd take the tests" });
   await outcome;
   assert.ok(h.room.read("lounge").some((m) => m.text === "done, @cyd take the tests"));
+});
+
+test("sessions: a work thread reply still over the limit after two redos posts cut with a marker", async (t) => {
+  const h = setup(t);
+  const thread = h.room.createThread("lounge", "Scout", "owner");
+  const outcome = h.sessions.workTurn({
+    agent: "ada",
+    roomId: thread.id,
+    cwd: h.homeDir,
+    brief: "work",
+    onActivity: () => {},
+  });
+  for (let i = 0; i < 3; i++) {
+    await waitFor(() => h.adapter.turns.length === i + 1, `turn ${i + 1}`);
+    h.adapter.turns[i]!.resolve({ kind: "post", text: "c".repeat(1259) });
+  }
+  const result = await outcome;
+  const posted = result.message;
+  assert.ok(posted, "the reply is not lost");
+  assert.equal(posted.text.length <= 1000, true);
+  assert.match(posted.text, /^c+\n\[cut: 1259 characters, the limit here is 1000\]$/);
+  assert.equal(h.room.read(thread.id).some((m) => m.kind === "event" && /not posted/.test(m.text)), false);
 });

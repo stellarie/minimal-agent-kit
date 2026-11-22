@@ -6,7 +6,7 @@ import type { Roster } from "../roster/roster.ts";
 import { mentions } from "../scheduler/scheduler.ts";
 import type { NearThread } from "../adapters/types.ts";
 import type { TurnOutcome, WorkTurnInput } from "../sessions/sessions.ts";
-import { isThread, LoungeError, type Channel, type Message, type Room } from "./room.ts";
+import { isThread, LoungeError, MAX_REPORT_POST, type Channel, type Message, type Room } from "./room.ts";
 
 export interface ThreadInfo extends Channel {
   parent: string;
@@ -275,7 +275,7 @@ export class Threads {
     if (!info || this.#stopped) return;
     this.#quiet = true;
     try {
-      this.#opts.room.post(author, roomId, text);
+      this.#opts.room.post(author, roomId, text, "text", [], undefined, MAX_REPORT_POST);
     } finally {
       this.#quiet = false;
     }

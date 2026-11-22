@@ -235,3 +235,66 @@ test("lounge_spawn: a caller with no running turn has no parent thread", async (
   root(h);
   await assert.rejects(async () => spawnTool.run({ agent: "cyd", brief: "x" }, { caller: "dee", deps: deps(h) }), code("bad_thread"));
 });
+
+test("lounge_spawn: one turn spawns several children, even when a child has the spawner's own agent", async (t) => {
+  const h = setup(t);
+  const top = root(h);
+  const ids: string[] = [];
+  for (const brief of ["scout one", "scout two", "scout three"]) {
+    const out = (await spawnTool.run(
+      { agent: "ada", brief },
+      { caller: "ada", roomId: top.id, deps: deps(h) },
+    )) as { id: string };
+    ids.push(out.id);
+  }
+  assert.equal(new Set(ids).size, 3);
+  assert.deepEqual(h.children.childrenOf(top.id).sort(), [...ids].sort());
+});
+
+test("lounge_spawn: a child with the spawner's agent can spawn below itself", async (t) => {
+  const h = setup(t);
+  const top = root(h);
+  const one = h.children.spawnChild("ada", top.id, { agent: "ada", brief: "scout" });
+  const out = (await spawnTool.run(
+    { agent: "cyd", brief: "dig" },
+    { caller: "ada", roomId: one.id, deps: deps(h) },
+  )) as { id: string };
+  assert.equal(h.children.parentOf(out.id), one.id);
+});
+
+test("lounge_spawn: a turn token of a room with no running turn of the caller cannot spawn", async (t) => {
+  const h = setup(t);
+  const top = root(h);
+  h.turn("ada", top.id).finish();
+  await tick();
+  await assert.rejects(
+    async () => spawnTool.run({ agent: "cyd", brief: "x" }, { caller: "ada", roomId: top.id, deps: deps(h) }),
+    code("bad_thread"),
+  );
+  await assert.rejects(
+    async () => spawnTool.run({ agent: "cyd", brief: "x" }, { caller: "ada", roomId: "lounge", deps: deps(h) }),
+    code("bad_thread"),
+  );
+});
+
+test("lounge_spawn: with no turn room and two running threads the parent stays ambiguous", async (t) => {
+  const h = setup(t);
+  const top = root(h);
+  h.children.spawnChild("ada", top.id, { agent: "ada", brief: "scout" });
+  await assert.rejects(async () => spawnTool.run({ agent: "cyd", brief: "x" }, { caller: "ada", deps: deps(h) }), code("bad_thread"));
+});
+
+test("c15_1: a child reply near the room limit still reaches the spawner", async (t) => {
+  const h = setup(t);
+  const top = root(h);
+  const child = h.children.spawnChild("ada", top.id, { agent: "cyd", brief: "explore" });
+  h.turn("ada", top.id).finish();
+  await tick();
+  const long = "x".repeat(990);
+  const reply = h.room.post("cyd", child.id, long);
+  h.turn("cyd", child.id).finish({ message: reply });
+  await tick();
+  const reports = h.room.read(top.id).filter((m) => m.author === "cyd" && m.kind === undefined);
+  assert.equal(reports.length, 1);
+  assert.ok(reports[0]!.text.includes(long));
+});

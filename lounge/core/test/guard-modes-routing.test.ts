@@ -139,16 +139,64 @@ test("c3_1: auto judges a plugin ask and a non-mutating ask in the same way", as
   assert.ok(!r.judged[0]!.system.includes("plugin wants a look"));
 });
 
-test("c3_1: auto leaves an allowed call to the agent tool mode", async (t) => {
+test("c3_1: auto leaves an allowed call to the agent tool mode, except ask mode", async (t) => {
   const full = rig(t, { gm: "auto", tool: "full" });
   assert.equal((await run(full, SHELL_ALLOW)).result.asked, false);
-  const ask = rig(t, { gm: "auto", tool: "ask" });
-  assert.equal((await run(ask, SHELL_ALLOW)).result.asked, true);
-  assert.equal(ask.approvals.cards.length, 1);
   const auto = rig(t, { gm: "auto", tool: "auto" });
   const { entries } = await run(auto, SHELL_ALLOW);
   assert.deepEqual(entries.map((e) => [e.outcome, e.source]), [["auto-allowed", "classifier"]]);
-  for (const r of [full, ask, auto]) assert.equal(r.judged.length, 0);
+  for (const r of [full, auto]) assert.equal(r.judged.length, 0);
+});
+
+test("c3_1: auto sends a change in ask tool mode to the judge, and SAFE opens no card", async (t) => {
+  const r = rig(t, { gm: "auto", tool: "ask" });
+  for (const call of [SHELL_ALLOW, WRITE_ALLOW]) {
+    const { result, entries } = await run(r, call);
+    assert.deepEqual([result.decision, result.asked], ["allow", false], call[0]);
+    assert.deepEqual(entries.map((e) => [e.verdict, e.outcome, e.source]), [["allow", "auto-allowed", "judge"]], call[0]);
+  }
+  assert.equal(r.approvals.cards.length, 0);
+  assert.equal(r.judged.length, 2);
+  assert.equal(r.classified.length, 0, "the tool mode classifier is not used in ask mode");
+  assert.match(r.judged[0]!.user, /Rule reason: ask mode: the owner approves each change/);
+});
+
+test("c3_1: auto opens a card in ask tool mode when the judge is not exactly SAFE", async (t) => {
+  for (const text of ["UNSAFE: writes outside the project", "SAFE: ok", "maybe"]) {
+    const r = rig(t, { gm: "auto", tool: "ask", judge: () => Promise.resolve(text) });
+    const { result, entries } = await run(r, SHELL_ALLOW);
+    assert.deepEqual([result.decision, result.asked], ["allow", true], text);
+    assert.equal(r.approvals.cards.length, 1, text);
+    assert.match(r.approvals.cards[0]!.reason, /^auto guard: /, text);
+    assert.deepEqual(entries.map((e) => [e.outcome, e.source]), [["allowed", "judge"]], text);
+  }
+  const none = rig(t, { gm: "auto", tool: "ask", judge: "none" });
+  assert.equal((await run(none, SHELL_ALLOW)).result.asked, true);
+  assert.match(none.approvals.cards[0]!.reason, /^auto guard: no judge for this runtime/);
+});
+
+test("c3_1: auto never judges a call that ask tool mode lets through", async (t) => {
+  const r = rig(t, { gm: "auto", tool: "ask" });
+  for (const call of [SHELL_READ, READ_ALLOW]) {
+    const { result, entries } = await run(r, call);
+    assert.deepEqual([result.decision, result.asked], ["allow", false], call[0]);
+    assert.equal(entries.length, 0, call[0]);
+  }
+  assert.equal(r.judged.length, 0);
+});
+
+test("c3_1: auto still denies a change for a read-only agent before the judge", async (t) => {
+  const r = rig(t, { gm: "auto", tool: "read-only" });
+  assert.equal((await run(r, SHELL_ALLOW)).result.decision, "deny");
+  assert.equal(r.judged.length, 0);
+});
+
+test("c3_1: auto and ask tool mode with rule asks off judges the change, not the rule", async (t) => {
+  const r = rig(t, { gm: "auto", tool: "ask", ruleAsks: false });
+  const { result, entries } = await run(r, SHELL_ASK);
+  assert.deepEqual([result.decision, result.asked], ["allow", false]);
+  assert.deepEqual(entries.map((e) => [e.outcome, e.source]), [["auto-allowed", "judge"]]);
+  assert.equal(r.judged.length, 1);
 });
 
 test("c3_1: bypass allows a rule ask and a plugin ask with no card and logs it", async (t) => {

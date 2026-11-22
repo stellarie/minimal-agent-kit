@@ -54,7 +54,7 @@ The owner sets one guard mode for the whole lounge in the app header. An agent c
 | Mode | A rule or plugin ask | A mutating call that the rules allow |
 |---|---|---|
 | `normal` | Opens an approval card, as before. | The agent's tool mode decides. |
-| `auto` | A judge rates it. An exact `SAFE` allows with no card. Any other answer, a cut command, an error, a timeout, or no judge opens a card with the judge reason. | The agent's tool mode decides. |
+| `auto` | A judge rates it. An exact `SAFE` allows with no card. Any other answer, a cut command, an error, a timeout, or no judge opens a card with the judge reason. | The agent's tool mode decides, except that a call which an `ask` tool mode would send to a card goes to the same judge first. |
 | `bypass` | Allowed with no card. | Allowed with no card, whatever the tool mode. |
 
 - Hard blocks stay in every mode. The hook denies a block before the core, and the core reads no guard mode for a block. An askable block still opens its danger card in `bypass` when `guard.blockAsks` is on.
@@ -86,7 +86,7 @@ Each runtime plugin reads its model list when it loads, and again on **Refresh**
 - Claude Code: the newest `*-cc.json` in `~/.claude/cache/model-catalog`, without the masked ids. If the folder is empty, the efforts come from `claude --help`.
 - Codex: `codex debug models` with the lounge `CODEX_HOME`. If it fails, `models_cache.json` of that folder.
 - The efforts of an agent are the efforts of its model. An empty or typed model gets all efforts of the catalog.
-- Codex gets `-c model_reasoning_effort=<effort>` on every turn, a resumed turn too. A resumed thread gets the full context again when the lounge rules changed.
+- Codex gets `-m <model>` and `-c model_reasoning_effort=<effort>` on every turn, a resumed turn too. Without `-m`, a resumed thread runs on the Codex default model. A resumed thread gets the full context again when the lounge rules changed.
 - A plugin setup function gets `api.home`, the lounge home folder.
 
 ## Plugin skills
@@ -125,7 +125,8 @@ flowchart TD
 ```
 
 - The depth cap is 2 below a channel thread. A deeper spawn returns `depth cap`.
-- When the lead of a child ends a turn with no pending turn, the core posts the final reply into the parent. It mentions the spawner.
+- One turn can spawn many children. The turn token names the thread of the turn, so a child with the same agent as the spawner does not make the parent unclear. A spawn outside a running turn of the caller in that thread returns `bad_thread`.
+- When the lead of a child ends a turn with no pending turn, the core posts the final reply into the parent. It mentions the spawner. The report may hold up to 4000 characters, more than the 1000 of a thread post. A final reply over the 1000 limit gets two redo requests. Then the core posts it cut, with a marker that gives the full length, so the spawner is never left with no reply.
 - After you spawn, end your turn. Do not poll. The final reply of the child wakes you.
 - A stop cascades to every descendant. A stopped child never resumes. Stop marks live in memory, so they hold for one core run.
 - The agent graph tab shows the thread tree with live status.
@@ -140,6 +141,8 @@ A lounge turn sees only lounge skills and the files that the context builder ins
 | Claude Code | `--setting-sources project,local`, `--strict-mcp-config` with the lounge MCP server, a lounge settings file, `--disable-slash-commands`, and `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`. The settings file holds the guard hook and the `CLAUDE.md` excludes. The lounge never uses `--bare`, because it skips hooks and OAuth. |
 | Codex | `CODEX_HOME` is `codex-home` in the lounge home, with `cli_auth_credentials_store="file"`. Your `~/.codex` skills and `AGENTS.md` do not load. The guard hook is passed with `-c hooks.PreToolUse=...`. See [codex/hooks.md](../../codex/hooks.md). |
 
+- Every Codex turn, a resumed one too, gets `-c sandbox_mode="workspace-write"` and `-c windows.sandbox="unelevated"`. A shell call can write in the working folder, and the guard hook still judges it. With no Windows sandbox selected, Codex rejects every shell call with `blocked by policy`. Set `options.sandbox` of an agent to `read-only` or `danger-full-access` to change the mode.
+- Every Codex turn, a resumed one too, gets the lounge MCP server as `mcp_servers.lounge`. The bearer token comes from the `LOUNGE_GUARD_TOKEN` variable of the turn, so it never appears in the command line. The lounge sets the tool approval to `approve`, because `codex exec` cannot ask.
 - The lounge never copies `auth.json` from your Codex folder. A refresh token that rotates in one folder can break the other login.
 - **Sign in to Codex** in the app runs `codex login` once with the lounge `CODEX_HOME`. A turn without a login stops with a clear error.
 - The Claude hook matcher covers `Bash`, `PowerShell`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Read`, `Glob`, and `Grep`. The Codex hook matcher is `^Bash$`.

@@ -56,6 +56,8 @@ export interface McpDeps {
 export interface ToolContext {
   caller: Caller;
   deps: McpDeps;
+  // The room of the caller's turn. Unset for a full token.
+  roomId?: string;
   // Ends when the client cancels the call.
   signal?: AbortSignal;
 }
@@ -464,7 +466,12 @@ Why a new thread: ${why}` : args.brief;
       try {
         begin();
         if (!allowed(tool.action)) return failure(`forbidden: ${caller} may not use ${tool.action}`);
-        const out = await tool.run({ ...(args as Record<string, unknown>) }, { caller, deps, signal: extra.signal });
+        const out = await tool.run({ ...(args as Record<string, unknown>) }, {
+          caller,
+          deps,
+          signal: extra.signal,
+          ...(identity.roomId === undefined ? {} : { roomId: identity.roomId }),
+        });
         return typeof out === "string" ? { content: [{ type: "text", text: out }] } : text(out);
       } catch (err) {
         return failureOf(err);
@@ -542,7 +549,7 @@ export function createMcpHandler(deps: McpDeps, options: McpOptions = {}): McpHa
     const caller = callerForToken(deps.tokens, token);
     if (caller) return { caller, restricted: false };
     const grant = deps.restricted.lookup(token);
-    if (grant) return { caller: grant.caller, restricted: true };
+    if (grant) return { caller: grant.caller, restricted: true, ...(grant.roomId === undefined ? {} : { roomId: grant.roomId }) };
     return null;
   };
 

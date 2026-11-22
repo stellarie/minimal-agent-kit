@@ -22,6 +22,8 @@ export type Action =
 export interface Identity {
   caller: Caller;
   restricted: boolean;
+  // The room of the turn that holds this token.
+  roomId?: string;
 }
 
 const LOUNGE_ACTIONS: readonly Action[] = [

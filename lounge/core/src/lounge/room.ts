@@ -7,6 +7,8 @@ export const MAX_TEXT = 8000;
 // Posts stay short: channels, then agent threads.
 export const MAX_CHANNEL_POST = 2000;
 export const MAX_THREAD_POST = 1000;
+// A child thread report to its spawner holds a whole reply and a lead-in.
+export const MAX_REPORT_POST = 4000;
 export const DEFAULT_READ_LIMIT = 50;
 export const MAX_READ_LIMIT = 200;
 export const SESSION_ROOM_PREFIX = "session-";
@@ -260,13 +262,15 @@ export class Room {
     kind: MessageKind = "text",
     attachments: Attachment[] = [],
     replyTo?: number,
+    // Replaces the limit of the room.
+    limit?: number,
   ): Message {
     if (typeof text !== "string" || (text.trim().length === 0 && attachments.length === 0)) {
       throw new LoungeError("bad_text", "text is empty");
     }
-    const limit = kind === "text" ? postLimit(author, roomId) : MAX_TEXT;
-    if (text.length > limit) {
-      throw new LoungeError("bad_text", tooLongText(text.length, limit));
+    const max = limit ?? (kind === "text" ? postLimit(author, roomId) : MAX_TEXT);
+    if (text.length > max) {
+      throw new LoungeError("bad_text", tooLongText(text.length, max));
     }
     this.#requireRoom(roomId);
     if (replyTo !== undefined) this.#requireReplyTarget(roomId, replyTo);
