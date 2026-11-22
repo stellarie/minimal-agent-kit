@@ -91,7 +91,7 @@ const summary = (x: Awaited<ReturnType<typeof run>>) => ({
   rows: x.entries.map((e) => [e.verdict, e.outcome, e.source]),
 });
 
-test("c3_1: normal mode keeps every decision of today's guard", async (t) => {
+test("c3_1: normal mode keeps every decision of the guard before modes",async (t) => {
   const calls = [SHELL_ALLOW, SHELL_READ, SHELL_ASK, SHELL_BLOCK, WRITE_ASK, WRITE_ALLOW, READ_ALLOW];
   for (const tool of ["read-only", "ask", "auto", "full"] as const) {
     for (const call of calls) {
