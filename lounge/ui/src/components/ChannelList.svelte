@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import type { Category, Channel, Layout, LayoutBody } from "../lib/api.ts";
+  import { advance, finish, hintAt, press, type Hint, type Row, type Session } from "../lib/drag.ts";
   import {
     groups,
     moveCategory,
@@ -9,7 +10,6 @@
     stepCategory,
     stepChannel,
     toBody,
-    type Drop,
   } from "../lib/layout.ts";
 
   let {
@@ -51,8 +51,13 @@
   let renameDraft = $state("");
   let renameInput = $state<HTMLInputElement>();
 
-  let dragging = $state<{ type: "channel" | "category"; id: string } | null>(null);
-  let hint = $state<{ kind: "channel"; drop: Drop } | { kind: "category"; before: string | null } | null>(null);
+  let nav = $state<HTMLElement>();
+  let session = $state<Session | null>(null);
+  let hint = $state<Hint | null>(null);
+  // The copy that follows the pointer.
+  let ghost = $state<{ x: number; y: number; w: number; label: string } | null>(null);
+  let grab = { x: 0, y: 0, w: 0, label: "" };
+  const dragging = $derived(session?.phase === "dragging" ? session : null);
 
   const list = $derived(groups(layout));
   const threadsOf = (id: string) => layout.channels.filter((c) => c.parent === id);
@@ -136,65 +141,115 @@
 
   // Drag and drop
 
-  function startDrag(e: DragEvent, type: "channel" | "category", id: string) {
-    dragging = { type, id };
-    e.dataTransfer?.setData("text/plain", id);
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+  // The row boxes now, in page order. A folded group has no channel row.
+  function measure(): { rows: Row[]; box: DOMRect } | null {
+    if (!nav) return null;
+    const rows: Row[] = [];
+    for (const section of nav.querySelectorAll<HTMLElement>("section.group")) {
+      const category = section.dataset.group || null;
+      const g = section.getBoundingClientRect();
+      const head = section.querySelector(".cat-head")?.getBoundingClientRect();
+      rows.push({
+        kind: "group",
+        category,
+        top: g.top,
+        bottom: g.bottom,
+        ...(head ? { headMid: head.top + head.height / 2 } : {}),
+      });
+      for (const li of section.querySelectorAll<HTMLElement>(":scope > ul > li[data-row]")) {
+        const all = li.getBoundingClientRect();
+        const line = li.querySelector("[data-channel]")?.getBoundingClientRect() ?? all;
+        rows.push({ kind: "channel", id: li.dataset.row!, category, top: all.top, mid: line.top + line.height / 2, bottom: all.bottom });
+      }
+    }
+    return { rows, box: nav.getBoundingClientRect() };
   }
 
-  function endDrag() {
-    dragging = null;
-    hint = null;
-  }
-
-  const upper = (e: DragEvent) => {
+  function onPress(e: PointerEvent, kind: "channel" | "category", id: string, label: string) {
+    const target = e.target as HTMLElement;
+    if (e.button !== 0 || session || target.closest(".tool, form, input, .threads")) return;
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    return e.clientY < r.top + r.height / 2;
-  };
-
-  function overChannel(e: DragEvent, groupIndex: number, index: number) {
-    if (dragging?.type !== "channel") return;
-    e.preventDefault();
-    e.stopPropagation();
-    const g = list[groupIndex]!;
-    const next = upper(e) ? g.channels[index] : g.channels[index + 1];
-    hint = next
-      ? { kind: "channel", drop: { kind: "before", id: next.id } }
-      : { kind: "channel", drop: { kind: "into", category: g.category?.id ?? null } };
+    grab = { x: e.clientX - r.left, y: e.clientY - r.top, w: r.width, label };
+    session = press(kind, id, e.clientX, e.clientY);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onRelease);
+    window.addEventListener("pointercancel", clear);
+    window.addEventListener("blur", clear);
+    window.addEventListener("keydown", onEscape);
   }
 
-  function overGroup(e: DragEvent, groupIndex: number) {
-    if (!dragging) return;
-    e.preventDefault();
-    const g = list[groupIndex]!;
-    if (dragging.type === "channel") {
-      hint = { kind: "channel", drop: { kind: "into", category: g.category?.id ?? null } };
-      return;
-    }
-    const cats = layout.categories;
-    if (!g.category) {
-      hint = { kind: "category", before: cats[0]?.id ?? null };
-      return;
-    }
-    const at = cats.findIndex((c) => c.id === g.category!.id);
-    hint = { kind: "category", before: upper(e) ? g.category.id : (cats[at + 1]?.id ?? null) };
+  function onPointerMove(e: PointerEvent) {
+    if (!session) return;
+    session = advance(session, e.clientX, e.clientY);
+    if (session.phase !== "dragging") return;
+    const m = measure();
+    hint = m ? hintAt(session, e.clientX, e.clientY, m.rows, m.box) : null;
+    ghost = { x: e.clientX - grab.x, y: e.clientY - grab.y, w: grab.w, label: grab.label };
   }
 
-  async function drop(e: DragEvent) {
-    e.preventDefault();
-    const d = dragging;
-    const h = hint;
-    endDrag();
-    if (!d || !h) return;
-    if (d.type === "channel" && h.kind === "channel") {
+  function onRelease() {
+    const s = session;
+    const landing = s ? finish(s, hint) : null;
+    const wasDrag = s?.phase === "dragging";
+    clear();
+    if (wasDrag) swallowClick();
+    if (s && landing) void drop(s, landing);
+  }
+
+  // A cancel while the button is still down: the later release must not click the row.
+  function onEscape(e: KeyboardEvent) {
+    if (e.key !== "Escape") return;
+    const wasDrag = session?.phase === "dragging";
+    clear();
+    if (wasDrag) swallowAfterRelease();
+  }
+
+  function clear() {
+    session = null;
+    hint = null;
+    ghost = null;
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onRelease);
+    window.removeEventListener("pointercancel", clear);
+    window.removeEventListener("blur", clear);
+    window.removeEventListener("keydown", onEscape);
+  }
+
+  // The click that follows a drag release would open the row or fold the category.
+  function swallowClick() {
+    const stop = (e: Event) => {
+      e.stopPropagation();
+      e.preventDefault();
+    };
+    window.addEventListener("click", stop, true);
+    setTimeout(() => window.removeEventListener("click", stop, true), 0);
+  }
+
+  function swallowAfterRelease() {
+    const arm = () => {
+      off();
+      swallowClick();
+    };
+    const off = () => {
+      window.removeEventListener("pointerup", arm, true);
+      window.removeEventListener("blur", off);
+    };
+    window.addEventListener("pointerup", arm, true);
+    window.addEventListener("blur", off);
+  }
+
+  async function drop(d: Session, h: Hint) {
+    if (d.kind === "channel" && h.kind === "channel") {
       const body = moveChannel(layout, d.id, h.drop);
       const cat = body.channels.find((x) => x.id === d.id)?.category ?? null;
       await commit(body, `Moved #${nameOfChannel(d.id)} to ${nameOfCategory(cat)}.`);
     }
-    if (d.type === "category" && h.kind === "category") {
+    if (d.kind === "category" && h.kind === "category") {
       await commit(moveCategory(layout, d.id, h.before), `Moved the category ${nameOfCategory(d.id)}.`);
     }
   }
+
+  $effect(() => clear);
 
   const isDropBefore = (id: string) => hint?.kind === "channel" && hint.drop.kind === "before" && hint.drop.id === id;
   const isDropEnd = (cat: string | null) =>
@@ -248,7 +303,7 @@
   </button>
 {/snippet}
 
-<nav class="channels" aria-labelledby="channels-title">
+<nav class="channels" class:dragging-now={dragging !== null} aria-labelledby="channels-title" bind:this={nav}>
   <div class="title-row">
     <h2 id="channels-title" class="section-title">Channels</h2>
     <div class="menu-wrap">
@@ -285,20 +340,19 @@
   {/if}
   {#if error}<p class="error" role="alert">{error}</p>{/if}
 
-  {#each list as g, gi (g.category?.id ?? "")}
+  {#each list as g (g.category?.id ?? "")}
     {@const catId = g.category?.id ?? null}
     {@const isFolded = catId !== null && folded.includes(catId)}
     <section
       class="group"
       class:drop-before={catId !== null && isCatBefore(catId)}
-      class:dragging={dragging?.type === "category" && dragging.id === catId}
+      class:dragging={dragging?.kind === "category" && dragging.id === catId}
+      data-group={catId ?? ""}
       aria-label={g.category ? g.category.name : "Channels with no category"}
-      ondragover={(e) => overGroup(e, gi)}
-      ondrop={drop}
     >
       {#if g.category}
         {@const cat = g.category}
-        <div class="cat-head" draggable={renaming !== cat.id} ondragstart={(e) => startDrag(e, "category", cat.id)} ondragend={endDrag} role="presentation">
+        <div class="cat-head" onpointerdown={(e) => onPress(e, "category", cat.id, cat.name)} role="presentation">
           {#if renaming === cat.id}
             <form class="cat-rename" onsubmit={(e) => saveRename(e, cat.id)}>
               <label for="cat-name-{cat.id}" class="sr-only">Category name</label>
@@ -335,16 +389,14 @@
         </div>
       {/if}
       <ul class:drop-end={isDropEnd(catId)} class:empty={g.channels.length === 0}>
-        {#each g.channels as c, ci (c.id)}
+        {#each g.channels as c (c.id)}
           {#if !isFolded || c.id === current || (unread[c.id] ?? 0) > 0}
             {@const threads = threadsOf(c.id)}
             <li
               class:drop-before={isDropBefore(c.id)}
-              class:dragging={dragging?.type === "channel" && dragging.id === c.id}
-              draggable="true"
-              ondragstart={(e) => startDrag(e, "channel", c.id)}
-              ondragend={endDrag}
-              ondragover={(e) => overChannel(e, gi, ci)}
+              class:dragging={dragging?.kind === "channel" && dragging.id === c.id}
+              data-row={c.id}
+              onpointerdown={(e) => onPress(e, "channel", c.id, `#${c.name}`)}
             >
               {@render row(c, false)}
               {#if threads.length > 0 && !isFolded}
@@ -357,26 +409,23 @@
             </li>
           {/if}
         {/each}
-        {#if g.channels.length === 0 && g.category && dragging?.type === "channel"}
+        {#if g.channels.length === 0 && g.category && dragging?.kind === "channel"}
           <li class="placeholder" aria-hidden="true">Drop a channel here</li>
         {/if}
       </ul>
     </section>
   {/each}
-  {#if dragging?.type === "category"}
-    <div
-      class="cat-end"
-      class:drop-before={isCatBefore(null)}
-      role="presentation"
-      ondragover={(e) => {
-        e.preventDefault();
-        hint = { kind: "category", before: null };
-      }}
-      ondrop={drop}
-    ></div>
+  {#if dragging?.kind === "category"}
+    <div class="cat-end" class:drop-before={isCatBefore(null)} role="presentation"></div>
   {/if}
   <p class="sr-only" aria-live="polite">{announce}</p>
 </nav>
+
+{#if ghost}
+  <div class="ghost" aria-hidden="true" style:left="{ghost.x}px" style:top="{ghost.y}px" style:width="{ghost.w}px">
+    {ghost.label}
+  </div>
+{/if}
 
 <style>
   .channels { padding: 12px 8px; }
@@ -450,8 +499,24 @@
   }
   .cat-head:hover .tool, .cat-head:focus-within .tool { opacity: 1; }
   .tool:hover, .tool:focus-visible { color: var(--pink-deep); background: var(--pink-soft); }
-  li[draggable="true"] { position: relative; }
+  li[data-row] { position: relative; }
+  .dragging-now { user-select: none; cursor: grabbing; }
   .dragging { opacity: .45; }
+  .ghost {
+    position: fixed;
+    z-index: 30;
+    padding: 5px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    background: var(--card);
+    box-shadow: var(--shadow);
+    color: var(--ink);
+    opacity: .6;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+  }
   .drop-before::before,
   .drop-end::after {
     content: "";
