@@ -44,16 +44,21 @@ export class Children {
     this.#opts = opts;
   }
 
+  // parent_id has no foreign key: deleting a thread leaves its children
+  // linked to it. A link to anything that is not a thread is no link, so
+  // that child becomes the top of its own tree.
   parentOf(id: string): string | undefined {
     const row = this.#opts.db.prepare("SELECT parent_id FROM threads WHERE room_id = ?").get(id);
-    return row?.parent_id ? String(row.parent_id) : undefined;
+    const parent = row?.parent_id ? String(row.parent_id) : undefined;
+    return parent !== undefined && this.#opts.threads.info(parent) ? parent : undefined;
   }
 
+  // Only known threads: a stale row must not crash the tree or stopTree.
   childrenOf(id: string): string[] {
     const rows = this.#opts.db
       .prepare("SELECT room_id FROM threads WHERE parent_id = ? ORDER BY created_at, room_id")
       .all(id);
-    return rows.map((r) => String(r.room_id));
+    return rows.map((r) => String(r.room_id)).filter((child) => this.#opts.threads.info(child));
   }
 
   // parent_id is set once at insert to an older thread, so the chain ends.

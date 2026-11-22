@@ -319,3 +319,40 @@ test("subagents: a child shows as running at spawn, then done, failed, or stoppe
   await tick();
   assert.deepEqual(subagents.list().map((e) => e.state), ["done", "failed", "failed"]);
 });
+
+test("tree: a thread whose parent thread was deleted becomes the top of its tree", (t) => {
+  const h = setup(t);
+  const top = root(h);
+  const one = h.children.spawnChild("ada", top.id, { agent: "cyd", brief: "one" });
+  const two = h.children.spawnChild("cyd", one.id, { agent: "dee", brief: "two" });
+  // Deleting a thread leaves the parent_id of its child behind.
+  h.room.deleteRoom(top.id);
+  assert.equal(h.children.parentOf(one.id), undefined, "a link to a gone thread is no link");
+  assert.equal(h.children.depth(two.id), 1);
+  const tree = h.children.tree(two.id);
+  assert.equal(tree.id, one.id);
+  assert.deepEqual(tree.children.map((c) => c.id), [two.id]);
+});
+
+test("tree: a parent link to a channel stops the climb at the thread", (t) => {
+  const h = setup(t);
+  const top = root(h);
+  const one = h.children.spawnChild("ada", top.id, { agent: "cyd", brief: "one" });
+  h.db.prepare("UPDATE threads SET parent_id = ? WHERE room_id = ?").run(top.parent, one.id);
+  assert.equal(h.children.parentOf(one.id), undefined);
+  assert.equal(h.children.tree(one.id).id, one.id);
+});
+
+test("tree and stopTree: a child whose room is gone is skipped", (t) => {
+  const h = setup(t);
+  const top = root(h);
+  const one = h.children.spawnChild("ada", top.id, { agent: "cyd", brief: "one" });
+  const two = h.children.spawnChild("ada", top.id, { agent: "dee", brief: "two" });
+  // A threads row without its room is not a known thread. The foreign key
+  // forbids it, so lift the key for this setup only.
+  h.db.exec("PRAGMA foreign_keys = OFF");
+  h.db.prepare("DELETE FROM rooms WHERE id = ?").run(one.id);
+  assert.deepEqual(h.children.childrenOf(top.id), [two.id]);
+  assert.deepEqual(h.children.tree(top.id).children.map((c) => c.id), [two.id]);
+  assert.equal(h.children.stopTree("owner", top.id), 2);
+});
